@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { Client, Conversation as XMTPConversation } from '@xmtp/xmtp-js'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { Client, Conversation as XMTPConversation, DecodedMessage } from '@xmtp/xmtp-js'
 import { ethers } from 'ethers'
 
 interface Message {
@@ -22,6 +22,7 @@ export function useXmtp() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversation, setCurrentConversation] = useState<XMTPConversation | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const streamRef = useRef<AsyncIterator<DecodedMessage> | null>(null)
 
   const connect = useCallback(async () => {
     if (typeof window === 'undefined' || !window.ethereum) {
@@ -113,23 +114,45 @@ export function useXmtp() {
         }))
       )
 
-      // Stream new messages
-      const stream = await conversation.streamMessages()
-      for await (const msg of stream) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            senderAddress: msg.senderAddress,
-            content: msg.content as string,
-            sent: msg.sent,
-          },
-        ])
-      }
+      // Set up message stream
+      streamRef.current = await conversation.streamMessages()
     } catch (error) {
       console.error('Error starting chat:', error)
       setError('Failed to start chat')
     }
   }, [client, canMessage])
+
+  // Handle message streaming
+  useEffect(() => {
+    let isMounted = true
+
+    const processStream = async () => {
+      if (!streamRef.current) return
+
+      try {
+        for await (const msg of streamRef.current) {
+          if (!isMounted) break
+          setMessages((prev) => [
+            ...prev,
+            {
+              senderAddress: msg.senderAddress,
+              content: msg.content as string,
+              sent: msg.sent,
+            },
+          ])
+        }
+      } catch (error) {
+        console.error('Error processing message stream:', error)
+      }
+    }
+
+    processStream()
+
+    return () => {
+      isMounted = false
+      streamRef.current = null
+    }
+  }, [currentConversation])
 
   const sendMessage = useCallback(async (content: string) => {
     if (!currentConversation || !content.trim()) return
