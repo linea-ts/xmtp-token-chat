@@ -9,6 +9,7 @@ A decentralized chat application built with Next.js and XMTP protocol.
 - Real-time messaging
 - Message history
 - Error handling and validation
+- wip nft recognition
 
 ## Technologies
 
