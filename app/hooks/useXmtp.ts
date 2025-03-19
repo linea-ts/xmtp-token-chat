@@ -15,6 +15,10 @@ interface Conversation {
   messages: Message[]
 }
 
+type MessageStream = {
+  [Symbol.asyncIterator](): AsyncIterator<DecodedMessage>
+}
+
 export function useXmtp() {
   const [client, setClient] = useState<Client | null>(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -22,7 +26,7 @@ export function useXmtp() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConversation, setCurrentConversation] = useState<XMTPConversation | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const streamRef = useRef<AsyncIterator<DecodedMessage> | null>(null)
+  const streamRef = useRef<MessageStream | null>(null)
 
   const connect = useCallback(async () => {
     if (typeof window === 'undefined' || !window.ethereum) {
