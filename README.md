@@ -45,7 +45,7 @@ A decentralized chat application built with Next.js and XMTP protocol.
 2. Enter a recipient's Ethereum address
 3. Start chatting!
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Inter](https://fonts.google.com/specimen/Inter), a modern and clean font family.
 
 ## Learn More
 
