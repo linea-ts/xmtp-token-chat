@@ -1,22 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# XMTP Chat
+
+A decentralized chat application built with Next.js and XMTP protocol.
+
+## Features
+
+- Connect with MetaMask wallet
+- Start conversations with any Ethereum address
+- Real-time messaging
+- Message history
+- Error handling and validation
+
+## Technologies
+
+- Next.js 14
+- TypeScript
+- Tailwind CSS
+- XMTP Protocol
+- Ethers.js
+- Web3-React
 
 ## Getting Started
 
-First, run the development server:
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Requirements
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- Node.js 18+
+- MetaMask wallet
+- Modern web browser
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Usage
+
+1. Connect your MetaMask wallet
+2. Enter a recipient's Ethereum address
+3. Start chatting!
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
