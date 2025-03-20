@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Client, Conversation as XMTPConversation, DecodedMessage } from '@xmtp/xmtp-js'
+import type { Client, Conversation as XMTPConversation, DecodedMessage } from '@xmtp/xmtp-js'
 import { ethers } from 'ethers'
 
 interface Message {
@@ -29,7 +29,9 @@ export function useXmtp() {
   const streamRef = useRef<MessageStream | null>(null)
 
   const connect = useCallback(async () => {
-    if (typeof window === 'undefined' || !window.ethereum) {
+    if (typeof window === 'undefined') return
+
+    if (!window.ethereum) {
       setError('MetaMask not found')
       return
     }
@@ -38,6 +40,9 @@ export function useXmtp() {
       await window.ethereum.request({ method: 'eth_requestAccounts' })
       const provider = new ethers.providers.Web3Provider(window.ethereum)
       const signer = provider.getSigner()
+      
+      // Dynamically import XMTP client
+      const { Client } = await import('@xmtp/xmtp-js')
       const xmtp = await Client.create(signer, { env: 'production' })
       setClient(xmtp)
       setIsConnected(true)

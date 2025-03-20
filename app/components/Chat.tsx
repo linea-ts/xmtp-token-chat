@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useXmtp } from '../hooks/useXmtp'
 
 interface Message {
@@ -9,14 +9,14 @@ interface Message {
   sent: Date
 }
 
-export default function Chat() {
+function ChatComponent() {
   const [recipientAddress, setRecipientAddress] = useState('')
   const [message, setMessage] = useState('')
   const { connect, disconnect, sendMessage, messages, isConnected, startChat, conversations, error } = useXmtp()
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-5xl">
+      <div className="w-full max-w-4xl">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
             <div className="text-4xl font-bold bg-yellow-300 p-4 rounded-lg">L•</div>
@@ -136,4 +136,19 @@ export default function Chat() {
       </div>
     </div>
   )
+}
+
+// Client-side only wrapper
+export default function Chat() {
+  const [isMounted, setIsMounted] = useState(false)
+
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  if (!isMounted) {
+    return null // or a loading state
+  }
+
+  return <ChatComponent />
 } 
