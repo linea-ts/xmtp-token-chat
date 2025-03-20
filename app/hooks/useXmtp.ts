@@ -10,9 +10,16 @@ interface Message {
   sent: Date
 }
 
+interface GroupMetadata {
+  name: string
+  members: string[]
+}
+
 interface Conversation {
   peerAddress: string
   messages: Message[]
+  isGroup?: boolean
+  groupMetadata?: GroupMetadata
 }
 
 type MessageStream = {
@@ -41,7 +48,6 @@ export function useXmtp() {
       const provider = new ethers.providers.Web3Provider(window.ethereum)
       const signer = provider.getSigner()
       
-      // Dynamically import XMTP client
       const { Client } = await import('@xmtp/xmtp-js')
       const xmtp = await Client.create(signer, { env: 'production' })
       setClient(xmtp)
@@ -53,6 +59,9 @@ export function useXmtp() {
       const conversationsData = await Promise.all(
         convos.map(async (conversation) => {
           const messages = await conversation.messages()
+          const metadata = conversation.context?.metadata
+          const isGroup = metadata?.type === 'group'
+          
           return {
             peerAddress: conversation.peerAddress,
             messages: messages.map((msg) => ({
@@ -60,9 +69,16 @@ export function useXmtp() {
               content: msg.content as string,
               sent: msg.sent,
             })),
+            isGroup,
+            groupMetadata: isGroup ? {
+              name: metadata.name,
+              // Parse the members string back into an array
+              members: metadata.members ? JSON.parse(metadata.members) : []
+            } : undefined
           }
         })
       )
+
       setConversations(conversationsData)
     } catch (error) {
       console.error('Error connecting to XMTP:', error)
@@ -152,6 +168,47 @@ export function useXmtp() {
     }
   }, [currentConversation])
 
+  const createGroup = useCallback(async (members: string[], name: string) => {
+    if (!client) {
+      setError('Please connect your wallet first')
+      return
+    }
+
+    try {
+      const clientAddress = await client.address
+      const groupId = `group:${Date.now()}`
+      
+      // Store members as a string to match XMTP's metadata format
+      const membersString = JSON.stringify([clientAddress, ...members])
+      
+      const conversation = await client.conversations.newConversation(members[0], {
+        conversationId: groupId,
+        metadata: {
+          type: 'group',
+          name: name,
+          members: membersString
+        }
+      })
+
+      const newGroup: Conversation = {
+        peerAddress: conversation.peerAddress,
+        messages: [],
+        isGroup: true,
+        groupMetadata: {
+          name,
+          // Parse the members back into an array when storing in state
+          members: [clientAddress, ...members]
+        }
+      }
+
+      setConversations(prev => [...prev, newGroup])
+      return conversation
+    } catch (error) {
+      console.error('Error creating group:', error)
+      setError('Failed to create group')
+    }
+  }, [client])
+
   useEffect(() => {
     return () => {
       if (streamRef.current) {
@@ -165,6 +222,7 @@ export function useXmtp() {
     disconnect,
     sendMessage,
     startChat,
+    createGroup,
     messages,
     conversations,
     isConnected,
