@@ -62,10 +62,15 @@ export function useXmtp() {
     } catch (error) {
       console.error('Error connecting to XMTP:', error)
       setError('Failed to connect to XMTP')
+      setIsConnected(false)
+      setClient(null)
     }
   }, [])
 
   const disconnect = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current[Symbol.asyncIterator]().return?.()
+    }
     setClient(null)
     setIsConnected(false)
     setMessages([])
@@ -74,16 +79,6 @@ export function useXmtp() {
     setError(null)
   }, [])
 
-  const canMessage = useCallback(async (address: string): Promise<boolean> => {
-    if (!client) return false
-    try {
-      return await client.canMessage(address)
-    } catch (error) {
-      console.error('Error checking if can message:', error)
-      return false
-    }
-  }, [client])
-
   const startChat = useCallback(async (address: string) => {
     if (!client) {
       setError('Please connect your wallet first')
@@ -91,102 +86,83 @@ export function useXmtp() {
     }
 
     try {
-      // Check if the address is valid
       if (!ethers.utils.isAddress(address)) {
         setError('Invalid Ethereum address')
         return
       }
 
-      // Check if the recipient is on the XMTP network
-      const canMessageRecipient = await canMessage(address)
-      if (!canMessageRecipient) {
-        setError('This address has not yet used XMTP. They need to initialize their XMTP identity first.')
+      const canMessage = await client.canMessage(address)
+      if (!canMessage) {
+        setError('This address has not yet initialized their XMTP identity')
         return
+      }
+
+      // Clean up existing stream if any
+      if (streamRef.current) {
+        streamRef.current[Symbol.asyncIterator]().return?.()
       }
 
       const conversation = await client.conversations.newConversation(address)
       setCurrentConversation(conversation)
-      setError(null)
 
       // Load existing messages
-      const existingMessages = await conversation.messages()
+      const msgs = await conversation.messages()
       setMessages(
-        existingMessages.map((msg) => ({
+        msgs.map((msg) => ({
           senderAddress: msg.senderAddress,
           content: msg.content as string,
           sent: msg.sent,
         }))
       )
 
-      // Set up message stream
+      // Stream new messages
       streamRef.current = await conversation.streamMessages()
+      for await (const msg of streamRef.current) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            senderAddress: msg.senderAddress,
+            content: msg.content as string,
+            sent: msg.sent,
+          },
+        ])
+      }
     } catch (error) {
       console.error('Error starting chat:', error)
       setError('Failed to start chat')
     }
-  }, [client, canMessage])
+  }, [client])
 
-  // Handle message streaming
-  useEffect(() => {
-    let isMounted = true
-
-    const processStream = async () => {
-      if (!streamRef.current) return
-
-      try {
-        for await (const msg of streamRef.current) {
-          if (!isMounted) break
-          setMessages((prev) => [
-            ...prev,
-            {
-              senderAddress: msg.senderAddress,
-              content: msg.content as string,
-              sent: msg.sent,
-            },
-          ])
-        }
-      } catch (error) {
-        console.error('Error processing message stream:', error)
-      }
+  const sendMessage = useCallback(async (message: string) => {
+    if (!currentConversation) {
+      setError('No active conversation')
+      return
     }
-
-    processStream()
-
-    return () => {
-      isMounted = false
-      streamRef.current = null
-    }
-  }, [currentConversation])
-
-  const sendMessage = useCallback(async (content: string) => {
-    if (!currentConversation || !content.trim()) return
 
     try {
-      await currentConversation.send(content)
-      setMessages((prev) => [
-        ...prev,
-        {
-          senderAddress: client?.address || '',
-          content,
-          sent: new Date(),
-        },
-      ])
-      setError(null)
+      await currentConversation.send(message)
     } catch (error) {
       console.error('Error sending message:', error)
       setError('Failed to send message')
     }
-  }, [currentConversation, client])
+  }, [currentConversation])
+
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current[Symbol.asyncIterator]().return?.()
+      }
+    }
+  }, [])
 
   return {
-    client,
-    isConnected,
     connect,
     disconnect,
     sendMessage,
-    messages,
     startChat,
+    messages,
     conversations,
+    isConnected,
     error,
   }
 } 
