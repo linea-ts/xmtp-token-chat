@@ -7,7 +7,7 @@
   --foreground: #171717;
   --header-bg: #ffffff;
   --header-border: #e5e7eb;
-  --connect-bar-bg: rgb(207 194 223 / 30%);
+  --connect-bar-bg: rgb(97 223 255 / 13%);
   --button-bg: #fff068;
   --button-hover: rgb(250 217 64);
 }
@@ -80,7 +80,7 @@
   color: black;
   font-weight: 600;
   padding: 0.5rem 1rem;
-  border-radius: 0.5rem;
+  border-radius: 1.5rem;
   transition: background-color 0.2s;
 }
 

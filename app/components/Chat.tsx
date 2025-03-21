@@ -176,10 +176,10 @@ function ChatContent() {
                       </g>
                     </svg>
                   </span>
-                  <h3 className="section_title__llN6N text-4xl font-bold ml-4">TokenChat</h3>
+                  <h3 className="section_title__llN6N text-4xl font-bold ml-1">TokenChat</h3>
                 </div>
               </div>
-              <p className="text-xl text-gray-600">Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM chain.</p>
+              <p className="text-xl text-gray-600">Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM network.</p>
             </div>
             <div className="flex justify-center">
               <button

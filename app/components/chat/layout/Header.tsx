@@ -14,7 +14,7 @@ export const Header = ({ onCreateGroup }: HeaderProps) => {
               <Logo />
             </div>
             <span className="text-sm text-gray-500 hidden sm:inline">
-              Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM chain.
+              Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM network.
             </span>
           </div>
           <div className="flex items-center space-x-3">
