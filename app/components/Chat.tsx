@@ -160,7 +160,7 @@ function ChatContent() {
               <div className="text-4xl font-bold bg-yellow-300 p-4 rounded-lg">L•</div>
               <h1 className="text-4xl font-bold ml-4">TokenChat</h1>
             </div>
-            <p className="text-xl text-gray-600">Connect with fellow memecoin/NFT holders.</p>
+            <p className="text-xl text-gray-600">Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM chain.</p>
           </div>
           <div className="flex justify-center">
             <button
@@ -176,185 +176,202 @@ function ChatContent() {
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-4">
-        <button
-          onClick={handleDisconnect}
-          style={{ backgroundColor: 'rgb(71 221 253)' }}
-          className="hover:bg-[#47ddfd]/80 text-black font-bold py-2 px-4 rounded"
-        >
-          Disconnect
-        </button>
-        <button
-          onClick={() => setShowGroupModal(true)}
-          className="bg-yellow-300 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded"
-        >
-          Create Group
-        </button>
-      </div>
+    <div className="min-h-screen flex flex-col">
+      {/* Modern Header */}
+      <header className="bg-white border-b shadow-sm py-4">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center">
+                <div className="text-2xl font-bold bg-yellow-300 p-2 rounded-lg">L•</div>
+                <h1 className="text-2xl font-bold ml-2">TokenChat</h1>
+              </div>
+              <span className="text-sm text-gray-500 hidden sm:inline">Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM chain.</span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={handleDisconnect}
+                style={{ backgroundColor: 'rgb(71 221 253)' }}
+                className="hover:bg-[#47ddfd]/80 text-black font-bold py-2 px-4 rounded-lg transition-all duration-200"
+              >
+                Disconnect
+              </button>
+              <button
+                onClick={() => setShowGroupModal(true)}
+                className="bg-yellow-300 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded-lg transition-all duration-200"
+              >
+                Create Group
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      <div className="grid grid-cols-3 gap-4">
-        {/* Left sidebar */}
-        <div className="col-span-1 border rounded p-4">
-          <div className="mb-4">
-            <input
-              type="text"
-              placeholder="Enter wallet address"
-              className="w-full p-2 border rounded"
-              value={recipientAddress}
-              onChange={(e) => setRecipientAddress(e.target.value)}
-            />
-            <button
-              onClick={handleStartChat}
-              className="mt-2 w-full bg-yellow-300 hover:bg-yellow-400 text-black py-2 px-4 rounded"
-            >
-              Start Chat
-            </button>
+      {/* Main Content */}
+      <div className="flex-1 container mx-auto p-4">
+        <div className="grid grid-cols-3 gap-4">
+          {/* Left sidebar */}
+          <div className="col-span-1 border rounded p-4">
+            <div className="mb-4">
+              <input
+                type="text"
+                placeholder="Enter wallet address"
+                className="w-full p-2 border rounded"
+                value={recipientAddress}
+                onChange={(e) => setRecipientAddress(e.target.value)}
+              />
+              <button
+                onClick={handleStartChat}
+                className="mt-2 w-full bg-yellow-300 hover:bg-yellow-400 text-black py-2 px-4 rounded"
+              >
+                Start Chat
+              </button>
+            </div>
+
+            <div>
+              <h2 className="font-semibold mb-2">Recent Chats</h2>
+              <div className="space-y-2">
+                {conversations.map((conversation) => {
+                  const isSelected = selectedConversation && 
+                    (conversation.groupMetadata 
+                      ? selectedConversation.groupMetadata?.name === conversation.groupMetadata?.name
+                      : selectedConversation.peerAddress === conversation.peerAddress);
+                  
+                  return (
+                    <div
+                      key={getConversationId(conversation)}
+                      onClick={() => selectConversation(conversation)}
+                      className={`p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-100 ${
+                        isSelected
+                          ? 'bg-yellow-50 border-2 border-yellow-300'
+                          : 'border border-gray-200'
+                      } flex justify-between items-center group`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">
+                          {conversation.groupMetadata?.name || truncateEthAddress(conversation.peerAddress)}
+                        </div>
+                        {conversation.groupMetadata ? (
+                          <div className="text-sm text-gray-500">
+                            {conversation.groupMetadata.members.length} members
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteChat(e, conversation)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 p-1 hover:bg-red-100 rounded"
+                        title={deleteButtonTooltip}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-red-500">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                        </svg>
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          <div>
-            <h2 className="font-semibold mb-2">Recent Chats</h2>
-            <div className="space-y-2">
-              {conversations.map((conversation) => {
-                const isSelected = selectedConversation && 
-                  (conversation.groupMetadata 
-                    ? selectedConversation.groupMetadata?.name === conversation.groupMetadata?.name
-                    : selectedConversation.peerAddress === conversation.peerAddress);
+          {/* Chat area */}
+          <div className="col-span-2 border rounded p-4 flex flex-col h-[calc(100vh-200px)] bg-gray-100">
+            {error && <div className="text-red-500 mb-4">{error}</div>}
+            
+            <div className="flex-1 overflow-y-auto mb-4 space-y-2">
+              {currentMessages.map((msg, index) => {
+                const isMyMessage = msg.senderAddress === (window as any).ethereum?.selectedAddress;
+                const messageTime = new Date(msg.sent).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const messageDate = new Date(msg.sent).toLocaleDateString();
                 
                 return (
                   <div
-                    key={getConversationId(conversation)}
-                    onClick={() => selectConversation(conversation)}
-                    className={`p-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-gray-100 ${
-                      isSelected
-                        ? 'bg-yellow-50 border-2 border-yellow-300'
-                        : 'border border-gray-200'
-                    } flex justify-between items-center group`}
+                    key={getMessageId(msg, index)}
+                    className="flex flex-col w-full"
                   >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate">
-                        {conversation.groupMetadata?.name || truncateEthAddress(conversation.peerAddress)}
-                      </div>
-                      {conversation.groupMetadata ? (
-                        <div className="text-sm text-gray-500">
-                          {conversation.groupMetadata.members.length} members
-                        </div>
-                      ) : null}
-                    </div>
-                    <button
-                      onClick={(e) => handleDeleteChat(e, conversation)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-2 p-1 hover:bg-red-100 rounded"
-                      title={deleteButtonTooltip}
+                    <div
+                      className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'} w-full mb-4`}
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-red-500">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                      </svg>
-                    </button>
+                      <div
+                        className={`p-3 rounded-2xl shadow-sm max-w-[80%] break-words
+                          ${isMyMessage ? 'bg-yellow-50' : 'bg-white'}`}
+                      >
+                        <div className="text-xs text-gray-500 mb-1">{truncateEthAddress(msg.senderAddress)}</div>
+                        <div className="mb-1">{msg.content}</div>
+                        <div className="text-xs text-gray-400">{messageTime} • {messageDate}</div>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </div>
-        </div>
 
-        {/* Chat area */}
-        <div className="col-span-2 border rounded p-4 flex flex-col h-[calc(100vh-200px)] bg-gray-100">
-          {error && <div className="text-red-500 mb-4">{error}</div>}
-          
-          <div className="flex-1 overflow-y-auto mb-4 space-y-2">
-            {currentMessages.map((msg, index) => {
-              const isMyMessage = msg.senderAddress === (window as any).ethereum?.selectedAddress;
-              const messageTime = new Date(msg.sent).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-              const messageDate = new Date(msg.sent).toLocaleDateString();
-              
-              return (
-                <div
-                  key={getMessageId(msg, index)}
-                  className="flex flex-col w-full"
-                >
-                  <div
-                    className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'} w-full mb-4`}
-                  >
-                    <div
-                      className={`p-3 rounded-2xl shadow-sm max-w-[80%] break-words
-                        ${isMyMessage ? 'bg-yellow-50' : 'bg-white'}`}
-                    >
-                      <div className="text-xs text-gray-500 mb-1">{truncateEthAddress(msg.senderAddress)}</div>
-                      <div className="mb-1">{msg.content}</div>
-                      <div className="text-xs text-gray-400">{messageTime} • {messageDate}</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <form onSubmit={handleSendMessage} className="flex gap-2 bg-white p-2 rounded">
-            <input
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              placeholder="Type your message"
-              className="flex-1 p-2 border rounded"
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (message.trim()) {
-                    handleSendMessage(e);
-                  }
-                }
-              }}
-            />
-            <button
-              type="submit"
-              className="bg-yellow-300 hover:bg-yellow-400 text-black px-6 py-2 rounded whitespace-nowrap"
-            >
-              Send
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Group Creation Modal */}
-      {showGroupModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg w-96">
-            <h2 className="text-xl font-bold mb-4">Create Group Chat</h2>
-            <form onSubmit={handleCreateGroup}>
+            <form onSubmit={handleSendMessage} className="flex gap-2 bg-white p-2 rounded">
               <input
                 type="text"
-                value={groupName}
-                onChange={(e) => setGroupName(e.target.value)}
-                placeholder="Group Name"
-                className="w-full p-2 mb-4 border rounded"
-                required
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Type your message"
+                className="flex-1 p-2 border rounded"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (message.trim()) {
+                      handleSendMessage(e);
+                    }
+                  }
+                }}
               />
-              <textarea
-                value={groupMembers}
-                onChange={(e) => setGroupMembers(e.target.value)}
-                placeholder="Member addresses (comma separated)"
-                className="w-full p-2 mb-4 border rounded h-24"
-                required
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowGroupModal(false)}
-                  className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-yellow-300 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded"
-                >
-                  Create
-                </button>
-              </div>
+              <button
+                type="submit"
+                className="bg-yellow-300 hover:bg-yellow-400 text-black px-6 py-2 rounded whitespace-nowrap"
+              >
+                Send
+              </button>
             </form>
           </div>
         </div>
-      )}
+
+        {/* Group Creation Modal */}
+        {showGroupModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg w-96">
+              <h2 className="text-xl font-bold mb-4">Create Group Chat</h2>
+              <form onSubmit={handleCreateGroup}>
+                <input
+                  type="text"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  placeholder="Group Name"
+                  className="w-full p-2 mb-4 border rounded"
+                  required
+                />
+                <textarea
+                  value={groupMembers}
+                  onChange={(e) => setGroupMembers(e.target.value)}
+                  placeholder="Member addresses (comma separated)"
+                  className="w-full p-2 mb-4 border rounded h-24"
+                  required
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowGroupModal(false)}
+                    className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-yellow-300 hover:bg-yellow-400 text-black font-bold py-2 px-4 rounded"
+                  >
+                    Create
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
