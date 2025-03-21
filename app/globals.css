@@ -5,6 +5,11 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --header-bg: #ffffff;
+  --header-border: #e5e7eb;
+  --connect-bar-bg: rgb(207 194 223 / 30%);
+  --button-bg: #fff068;
+  --button-hover: rgb(250 217 64);
 }
 
 @layer base {
@@ -23,4 +28,62 @@
   body {
     @apply bg-[var(--background)] text-[var(--foreground)];
   }
+}
+
+/* Custom styles */
+.section_headline__nyvPb {
+  display: flex;
+  align-items: center;
+}
+
+.section_icon__QAGu9 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.connect-bar {
+  background-color: var(--connect-bar-bg);
+  padding: 0rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.connect-bar__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(0, 0, 0, 0.7);
+  font-size: 0.875rem;
+}
+
+.connect-bar__status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: #22c55e;
+  border-radius: 9999px;
+}
+
+.connect-bar__disconnect {
+  padding: 0.25rem;
+  border-radius: 9999px;
+  transition: background-color 0.2s;
+}
+
+.connect-bar__disconnect:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+  background-color: var(--button-bg);
+  color: black;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--button-hover);
 }

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="800" height="600" viewBox="0 0 800 600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background pattern -->
+  <defs>
+    <pattern id="dotPattern" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="10" cy="10" r="2" fill="#6B46C1" opacity="0.2"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="600" fill="#1A1A2E"/>
+  <rect width="800" height="600" fill="url(#dotPattern)"/>
+  
+  <!-- Main content -->
+  <g transform="translate(100, 100)">
+    <!-- Exceptional User Experience -->
+    <rect x="50" y="50" width="300" height="60" rx="30" fill="#7DD3FC"/>
+    <text x="200" y="85" text-anchor="middle" fill="#000" font-family="Arial" font-size="20">Exceptional User Experience</text>
+    
+    <!-- Rich Builder Experience -->
+    <rect x="150" y="300" width="250" height="60" rx="30" fill="#6366F1"/>
+    <text x="275" y="335" text-anchor="middle" fill="#fff" font-family="Arial" font-size="20">Rich Builder Experience</text>
+    
+    <!-- Authentic Community Experience -->
+    <rect x="400" y="175" width="300" height="60" rx="30" fill="#FDE68A"/>
+    <text x="550" y="210" text-anchor="middle" fill="#000" font-family="Arial" font-size="20">Authentic Community Experience</text>
+    
+    <!-- Icons -->
+    <circle cx="50" y="50" r="30" fill="#F97316"/>
+    <circle cx="600" y="200" r="30" fill="#FCD34D"/>
+    <circle cx="300" y="350" r="30" fill="#10B981"/>
+  </g>
+</svg> 
