@@ -176,33 +176,36 @@ export function useXmtp() {
 
     try {
       const clientAddress = await client.address
-      const groupId = `group:${Date.now()}`
+      const groupId = `group:${name}:${Date.now()}`
+      const allMembers = [clientAddress, ...members]
+      const membersString = JSON.stringify(allMembers)
       
-      // Store members as a string to match XMTP's metadata format
-      const membersString = JSON.stringify([clientAddress, ...members])
-      
-      const conversation = await client.conversations.newConversation(members[0], {
-        conversationId: groupId,
-        metadata: {
-          type: 'group',
-          name: name,
-          members: membersString
-        }
-      })
+      // Create conversations with all members
+      const conversations = await Promise.all(
+        members.map(async (member) => {
+          return client.conversations.newConversation(member, {
+            conversationId: groupId,
+            metadata: {
+              type: 'group',
+              name: name,
+              members: membersString
+            }
+          })
+        })
+      )
 
       const newGroup: Conversation = {
-        peerAddress: conversation.peerAddress,
+        peerAddress: conversations[0].peerAddress,
         messages: [],
         isGroup: true,
         groupMetadata: {
           name,
-          // Parse the members back into an array when storing in state
-          members: [clientAddress, ...members]
+          members: allMembers
         }
       }
 
       setConversations(prev => [...prev, newGroup])
-      return conversation
+      return conversations[0]
     } catch (error) {
       console.error('Error creating group:', error)
       setError('Failed to create group')
@@ -225,6 +228,7 @@ export function useXmtp() {
     createGroup,
     messages,
     conversations,
+    setConversations,
     isConnected,
     error,
   }
