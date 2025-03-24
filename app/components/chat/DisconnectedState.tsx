@@ -17,9 +17,9 @@ export const DisconnectedState = ({ isLoading, onConnect }: DisconnectedStatePro
         ) : (
           <div className="animate-fade-in">
             <img 
-              src="/Screenshotbg.png" 
+              src="/bgtransparent.png" 
               alt="Disconnected State" 
-              className="pl-4 mx-auto mb-8 w-[240px] h-auto"
+              className="mx-auto mb-8 w-[300px] h-auto"
             />
             <div className="w-full max-w-5xl">
               <div className="text-center mb-8">
