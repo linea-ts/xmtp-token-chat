@@ -1,4 +1,6 @@
 import { truncateEthAddress } from '@/app/utils/truncateEthAddress';
+import { useEffect, useRef } from 'react';
+import { utils } from 'ethers';
 
 interface Message {
   id?: string;
@@ -14,6 +16,17 @@ interface MessageListProps {
 }
 
 export const MessageList = ({ messages, getMessageId, isSwitchingChat }: MessageListProps) => {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Scroll to bottom when messages change or when switching chats
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isSwitchingChat]);
+
   return (
     <div className="flex-1 overflow-y-auto mb-4 space-y-2">
       {isSwitchingChat ? (
@@ -23,7 +36,16 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
       ) : (
         <div className="animate-fade-in">
           {messages.map((msg, index) => {
-            const isMyMessage = msg.senderAddress === (window as any).ethereum?.selectedAddress;
+            const currentAddress = (window as any).ethereum?.selectedAddress;
+            console.log('Message sender:', msg.senderAddress);
+            console.log('Current user:', currentAddress);
+            
+            const isMyMessage = currentAddress && 
+              utils.getAddress(msg.senderAddress).toLowerCase() === 
+              utils.getAddress(currentAddress).toLowerCase();
+            
+            console.log('Is my message?', isMyMessage);
+
             const messageTime = new Date(msg.sent).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const messageDate = new Date(msg.sent).toLocaleDateString();
             
@@ -37,7 +59,7 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
                 >
                   <div
                     className={`p-3 rounded-2xl shadow-sm max-w-[80%] break-words
-                      ${isMyMessage ? 'bg-yellow-50' : 'bg-white'}`}
+                      ${isMyMessage ? 'bg-blue-100' : 'bg-white'}`}
                   >
                     <div className="text-xs text-gray-500 mb-1">{truncateEthAddress(msg.senderAddress)}</div>
                     <div className="mb-1">{msg.content}</div>
@@ -47,6 +69,8 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
               </div>
             );
           })}
+          {/* Add an empty div at the bottom for scrolling */}
+          <div ref={messagesEndRef} />
         </div>
       )}
     </div>

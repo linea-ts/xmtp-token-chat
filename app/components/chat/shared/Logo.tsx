@@ -9,7 +9,7 @@ export const Logo = () => {
           </g>
         </svg>
       </span>
-      <h3 className="section_title__llN6N text-2xl font-bold ml-2">TokenChat</h3>
+      <h3 className="section_title__llN6N text-2xl font-bold ml-2">TokenTalk</h3>
     </div>
   );
 }; 

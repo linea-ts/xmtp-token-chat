@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Client, Conversation as XMTPConversation, DecodedMessage } from '@xmtp/xmtp-js'
 import { ethers } from 'ethers'
+import { switchToLinea, validateLineaNetwork, setupNetworkMonitoring } from '../utils/chainValidation'
+import { TokenInfo, getAllNFTs, hasMatchingNFTs } from '../utils/tokenUtils'
 
 interface Message {
   senderAddress: string
@@ -20,6 +22,7 @@ interface Conversation {
   }
   preview?: string
   lastMessage?: string
+  sharedNFTs?: TokenInfo[]
 }
 
 type MessageStream = {
@@ -36,21 +39,43 @@ export function useXmtp() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSwitchingChat, setIsSwitchingChat] = useState(false)
   const streamRef = useRef<MessageStream | null>(null)
+  const [userNFTs, setUserNFTs] = useState<TokenInfo[]>([])
+  const [availableGroupChats, setAvailableGroupChats] = useState<{
+    contractAddress: string
+    name: string
+    joined: boolean
+  }[]>([])
+  const initializingRef = useRef(false)
 
+  // Modify the connect function
   const connect = useCallback(async () => {
-    if (typeof window === 'undefined') return
-
-    if (!window.ethereum) {
+    if (typeof window === 'undefined' || !window.ethereum) {
       setError('MetaMask not found')
       return
     }
 
+    // Prevent multiple simultaneous initialization attempts
+    if (initializingRef.current || client) {
+      console.log('Already initializing or client exists')
+      return
+    }
+
     try {
+      initializingRef.current = true
       setIsLoading(true)
-      await window.ethereum.request({ method: 'eth_requestAccounts' })
-      const provider = new ethers.providers.Web3Provider(window.ethereum)
-      const signer = provider.getSigner()
       
+      await window.ethereum.request({ method: 'eth_requestAccounts' })
+      const provider = new ethers.providers.Web3Provider(window.ethereum as any)
+      
+      try {
+        await validateLineaNetwork(provider)
+      } catch (error) {
+        await switchToLinea()
+        const updatedProvider = new ethers.providers.Web3Provider(window.ethereum as any)
+        await validateLineaNetwork(updatedProvider)
+      }
+      
+      const signer = provider.getSigner()
       const { Client } = await import('@xmtp/xmtp-js')
       const xmtp = await Client.create(signer, { env: 'production' })
       
@@ -60,15 +85,75 @@ export function useXmtp() {
 
       // Load existing conversations
       await loadConversations(xmtp)
-    } catch (error) {
+
+      // After successful XMTP connection
+      const nfts = await getAllNFTs(window.ethereum.selectedAddress)
+      setUserNFTs(nfts)
+      
+      // Update available group chats based on NFTs
+      const groups = nfts.map(nft => ({
+        contractAddress: nft.contractAddress,
+        name: `${nft.name} Holders Chat`,
+        joined: false
+      }))
+      setAvailableGroupChats(groups)
+      
+    } catch (error: any) {
       console.error('Error connecting to XMTP:', error)
-      setError('Failed to connect to XMTP')
+      setError(error.message || 'Failed to connect to XMTP')
       setIsConnected(false)
       setClient(null)
     } finally {
       setIsLoading(false)
+      initializingRef.current = false
     }
-  }, [])
+  }, [client])
+
+  // Then add the effects
+  useEffect(() => {
+    if (isConnected) {
+      setupNetworkMonitoring(async () => {
+        setError('Wrong network detected. Switching to Linea...')
+        try {
+          await switchToLinea()
+          // Re-initialize provider after network switch
+          const provider = new ethers.providers.Web3Provider(window.ethereum as any)
+          await validateLineaNetwork(provider)
+          setError(null)
+        } catch (error: any) {
+          console.error('Failed to switch network:', error)
+          setError('Please switch to Linea network to continue')
+          await disconnect()
+        }
+      })
+    }
+  }, [isConnected])
+
+  // Modify the persistence effect
+  useEffect(() => {
+    const checkPersistedConnection = async () => {
+      // Add check for initialization in progress
+      if (
+        typeof window === 'undefined' || 
+        !window.ethereum?.selectedAddress || 
+        client || 
+        initializingRef.current
+      ) return
+      
+      try {
+        const provider = new ethers.providers.Web3Provider(window.ethereum as any)
+        await validateLineaNetwork(provider)
+        // Only connect if we're not already connecting
+        if (!initializingRef.current) {
+          await connect()
+        }
+      } catch (error) {
+        console.error('Failed to restore connection:', error)
+      }
+    }
+
+    checkPersistedConnection()
+  }, [client, connect]) // Keep these dependencies
 
   const disconnect = useCallback(async () => {
     if (streamRef.current) {
@@ -98,77 +183,114 @@ export function useXmtp() {
 
     try {
       setIsSwitchingChat(true)
-      console.log('Starting chat with address:', peerAddress)
-      console.log('Current conversations:', conversations)
       
-      // Clean up existing message stream
-      if (streamRef.current) {
-        console.log('Cleaning up existing message stream')
-        streamRef.current[Symbol.asyncIterator]().return?.()
-      }
-
-      // Check if we already have a conversation with this address
+      // Check if we already have a conversation with this address first
       const existingConversation = conversations.find(conv => 
         !conv.groupMetadata && conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()
       )
       
-      console.log('Found existing conversation:', existingConversation)
-
-      // If starting a chat from the input, add it to conversations list if not exists
-      if (!existingConversation) {
-        console.log('Creating new conversation entry for:', peerAddress)
-        const newConversation: Conversation = {
-          id: `direct:${peerAddress.toLowerCase()}`,
-          peerAddress,
-          messages: [],
-          preview: '',
-          lastMessage: ''
-        }
-        setConversations(prev => [...prev, newConversation])
-      } else {
+      if (existingConversation) {
         console.log('Using existing conversation with:', peerAddress)
+        const conversation = await client.conversations.newConversation(peerAddress)
+        setCurrentConversation(conversation)
+        setMessages(existingConversation.messages)
+        return
+      }
+
+      // Get peer's NFTs only if we don't have an existing conversation
+      const peerNFTs = await getAllNFTs(peerAddress)
+
+      // Find shared NFTs
+      const shared = userNFTs.filter(userNFT => 
+        peerNFTs.some(peerNFT => 
+          peerNFT.contractAddress.toLowerCase() === userNFT.contractAddress.toLowerCase() &&
+          peerNFT.tokenId === userNFT.tokenId
+        )
+      )
+
+      if (shared.length === 0) {
+        setError('You do not share any NFTs with this address')
+        return
+      }
+
+      // If we reach here, users share NFTs and can chat
+      console.log('Creating new conversation entry for:', peerAddress)
+      const newConversation: Conversation = {
+        id: `direct:${peerAddress.toLowerCase()}`,
+        peerAddress,
+        messages: [],
+        preview: '',
+        lastMessage: '',
+        sharedNFTs: shared
       }
 
       // Get or create the XMTP conversation
-      console.log('Getting XMTP conversation for:', peerAddress)
       const conversation = await client.conversations.newConversation(peerAddress)
       setCurrentConversation(conversation)
       
+      // Add to conversations list
+      setConversations(prev => [...prev, newConversation])
+      
       // Load existing messages
-      console.log('Loading messages for conversation')
       const messages = await conversation.messages()
-      console.log('Found existing messages:', messages.length)
       setMessages(messages.map(msg => ({
         senderAddress: msg.senderAddress,
         content: msg.content as string,
         sent: msg.sent,
       })))
 
-      // Set up stream for new messages
-      console.log('Setting up message stream')
+      // Set up stream for new messages - MODIFIED THIS PART
+      if (streamRef.current) {
+        // Clean up existing stream first
+        streamRef.current[Symbol.asyncIterator]().return?.()
+      }
+
       streamRef.current = await conversation.streamMessages()
-      ;(async () => {
-        for await (const msg of streamRef.current!) {
-          console.log('Received new message:', {
-            from: msg.senderAddress,
-            content: msg.content,
-            time: msg.sent
-          })
-          setMessages(prevMessages => [...prevMessages, {
-            senderAddress: msg.senderAddress,
-            content: msg.content as string,
-            sent: msg.sent,
-          }])
+      
+      // Create a separate async function for message handling
+      const handleNewMessages = async () => {
+        try {
+          for await (const msg of streamRef.current!) {
+            console.log('New message received:', msg)
+            const newMessage = {
+              senderAddress: msg.senderAddress,
+              content: msg.content as string,
+              sent: msg.sent,
+            }
+            
+            // Update both the messages state and the conversation's messages
+            setMessages(prevMessages => [...prevMessages, newMessage])
+            setConversations(prevConvs => {
+              return prevConvs.map(conv => {
+                if (conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()) {
+                  return {
+                    ...conv,
+                    messages: [...conv.messages, newMessage],
+                    preview: msg.content as string,
+                    lastMessage: msg.content as string
+                  }
+                }
+                return conv
+              })
+            })
+          }
+        } catch (error) {
+          console.error('Error in message stream:', error)
         }
-      })()
+      }
+
+      // Start handling messages
+      handleNewMessages()
+
     } catch (error) {
       console.error('Error starting chat:', error)
       setError('Failed to start chat')
     } finally {
       setIsSwitchingChat(false)
     }
-  }, [client, conversations])
+  }, [client, conversations, userNFTs])
 
+  // Modify sendMessage to update local state immediately
   const sendMessage = useCallback(async (message: string) => {
     if (!currentConversation) {
       setError('No active conversation')
@@ -177,11 +299,34 @@ export function useXmtp() {
 
     try {
       await currentConversation.send(message)
+      
+      // Add message to local state immediately
+      const newMessage = {
+        senderAddress: await client?.address!,
+        content: message,
+        sent: new Date()
+      }
+      
+      // Update both messages and conversations state
+      setMessages(prevMessages => [...prevMessages, newMessage])
+      setConversations(prevConvs => {
+        return prevConvs.map(conv => {
+          if (conv.peerAddress.toLowerCase() === currentConversation.peerAddress.toLowerCase()) {
+            return {
+              ...conv,
+              messages: [...conv.messages, newMessage],
+              preview: message,
+              lastMessage: message
+            }
+          }
+          return conv
+        })
+      })
     } catch (error) {
       console.error('Error sending message:', error)
       setError('Failed to send message')
     }
-  }, [currentConversation])
+  }, [currentConversation, client])
 
   const createGroup = useCallback(async (members: string[], name: string) => {
     if (!client) {
@@ -234,10 +379,36 @@ export function useXmtp() {
       const convos = await xmtp.conversations.list()
       console.log('All XMTP conversations:', convos)
       
+      const provider = new ethers.providers.Web3Provider(window.ethereum as any)
+      const userAddress = await xmtp.address
+      
+      // Get user's NFTs
+      const myNFTs = await getAllNFTs(userAddress)
+      
+      // Filter and process conversations
       const conversationsData = await Promise.all(
         convos.map(async (conversation) => {
-          const messages = await conversation.messages()
           const isGroup = conversation.context?.metadata?.type === 'group'
+          let peerNFTs: TokenInfo[] = [];  // Declare peerNFTs here
+          
+          if (isGroup) {
+            const groupId = conversation.context?.conversationId
+            // Only include if it matches one of our token group IDs
+            const isTokenGroup = availableGroupChats.some(g => 
+              g.joined && `group:${g.contractAddress}` === groupId
+            )
+            if (!isTokenGroup) return null
+          } else {
+            // For direct chats, check if peer has matching NFTs
+            peerNFTs = await getAllNFTs(conversation.peerAddress)  // Assign to the declared variable
+            
+            // Skip if no matching NFTs
+            if (!hasMatchingNFTs(myNFTs, peerNFTs)) {
+              return null
+            }
+          }
+
+          const messages = await conversation.messages()
           const conversationId = isGroup 
             ? conversation.context?.conversationId || `group:${conversation.context?.metadata?.name}`
             : `direct:${conversation.peerAddress.toLowerCase()}`
@@ -255,25 +426,50 @@ export function useXmtp() {
               members: JSON.parse(conversation.context?.metadata?.members || '[]')
             } : undefined,
             preview: messages[messages.length - 1]?.content as string || '',
-            lastMessage: messages[messages.length - 1]?.content as string || ''
+            lastMessage: messages[messages.length - 1]?.content as string || '',
+            sharedNFTs: !isGroup ? peerNFTs.filter((peerNFT: TokenInfo) => 
+              myNFTs.some((myNFT: TokenInfo) => 
+                myNFT.contractAddress.toLowerCase() === peerNFT.contractAddress.toLowerCase() &&
+                myNFT.tokenId === peerNFT.tokenId
+              )
+            ) : undefined
           }
         })
       )
 
-      // Sort conversations by most recent message
-      const sortedConversations = conversationsData.sort((a, b) => {
+      // Filter out null values and sort conversations by most recent message
+      const validConversations = conversationsData.filter(conv => conv !== null)
+      const sortedConversations = validConversations.sort((a, b) => {
         const aTime = a.messages[a.messages.length - 1]?.sent.getTime() || 0
         const bTime = b.messages[b.messages.length - 1]?.sent.getTime() || 0
         return bTime - aTime
       })
       
-      console.log('Final conversations:', sortedConversations)
+      console.log('Final filtered conversations:', sortedConversations)
       setConversations(sortedConversations)
     } catch (error) {
       console.error('Error loading conversations:', error)
       setError('Failed to load conversations')
     }
   }
+
+  // Add function to join/leave group chats
+  const toggleGroupChat = useCallback(async (contractAddress: string) => {
+    const group = availableGroupChats.find(g => g.contractAddress === contractAddress)
+    if (!group) return
+
+    if (group.joined) {
+      // Leave group logic
+      setAvailableGroupChats(prev => 
+        prev.map(g => g.contractAddress === contractAddress ? {...g, joined: false} : g)
+      )
+    } else {
+      // Join group logic
+      setAvailableGroupChats(prev => 
+        prev.map(g => g.contractAddress === contractAddress ? {...g, joined: true} : g)
+      )
+    }
+  }, [availableGroupChats])
 
   useEffect(() => {
     return () => {
@@ -282,6 +478,43 @@ export function useXmtp() {
       }
     }
   }, [])
+
+  // Modify the ownership check effect to run less frequently
+  useEffect(() => {
+    if (!isConnected || !client) return
+
+    const checkNFTOwnership = async () => {
+      const userAddress = await client.address
+      const currentNFTs = await getAllNFTs(userAddress)
+      setUserNFTs(currentNFTs)
+
+      // Only check conversations that exist
+      if (conversations.length > 0) {
+        const filteredConversations = await Promise.all(
+          conversations.map(async (conv) => {
+            if (conv.groupMetadata) {
+              // Group chat logic...
+              return conv // For now, keep group chats
+            } else {
+              const peerNFTs = await getAllNFTs(conv.peerAddress)
+              return hasMatchingNFTs(currentNFTs, peerNFTs) ? conv : null
+            }
+          })
+        )
+        setConversations(filteredConversations.filter(conv => conv !== null))
+      }
+    }
+
+    // Run ownership check less frequently (every 5 minutes)
+    const interval = setInterval(checkNFTOwnership, 5 * 60 * 1000)
+
+    // Run once on initial connection
+    if (userNFTs.length === 0) {
+      checkNFTOwnership()
+    }
+
+    return () => clearInterval(interval)
+  }, [isConnected, client])
 
   return {
     connect,
@@ -297,5 +530,8 @@ export function useXmtp() {
     isLoading,
     setIsLoading,
     isSwitchingChat,
+    userNFTs,
+    availableGroupChats,
+    toggleGroupChat,
   }
 } 

@@ -11,6 +11,7 @@ import { GroupCreationModal } from './chat/GroupCreationModal'
 import { MessageList } from './chat/MessageList'
 import { MessageInput } from './chat/MessageInput'
 import { Message, Conversation } from '../types/chat'
+import { SharedNFTsList } from './chat/SharedNFTsList'
 
 const truncateEthAddress = (address: string) => {
   if (!address) return '';
@@ -156,6 +157,11 @@ function ChatContent() {
                         {conversation.groupMetadata && (
                           <div className="text-sm text-gray-500 truncate mt-1">
                             Members: {conversation.groupMetadata.members.map(m => truncateEthAddress(m)).join(', ')}
+                          </div>
+                        )}
+                        {conversation.sharedNFTs && conversation.sharedNFTs.length > 0 && (
+                          <div className="mt-1 text-left">
+                            <SharedNFTsList nfts={conversation.sharedNFTs} />
                           </div>
                         )}
                       </div>
