@@ -12,6 +12,7 @@ import { MessageList } from './chat/MessageList'
 import { MessageInput } from './chat/MessageInput'
 import { Message, Conversation } from '../types/chat'
 import { SharedNFTsList } from './chat/SharedNFTsList'
+import { CopyableAddress } from './common/CopyableAddress'
 
 const truncateEthAddress = (address: string) => {
   if (!address) return '';
@@ -55,11 +56,7 @@ function ChatContent() {
   }, [messages, selectedConversationId]);
 
   const handleConnect = async () => {
-    if (isConnected) {
-      disconnect()
-    } else {
-      await connect()
-    }
+    await connect()
   }
 
   const handleStartChat = async (e: React.FormEvent) => {
@@ -87,11 +84,6 @@ function ChatContent() {
     setGroupMembers('')
   }
 
-  const handleDisconnect = async () => {
-    setIsLoading(true);
-    await handleConnect();
-  };
-
   const getMessageId = (msg: Message, index: number) => {
     return `${msg.senderAddress}-${msg.sent?.getTime() || Date.now()}-${index}`;
   };
@@ -104,7 +96,7 @@ function ChatContent() {
     <div className="min-h-screen flex flex-col">
       <ConnectBar 
         address={(window as any).ethereum?.selectedAddress || ''}
-        onDisconnect={handleDisconnect}
+        onDisconnect={disconnect}
       />
 
       <Header onCreateGroup={() => setShowGroupModal(true)} />
@@ -145,8 +137,10 @@ function ChatContent() {
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <div className="font-medium truncate">
-                            {conversation.groupMetadata?.name || truncateEthAddress(conversation.peerAddress)}
+                          <div className="font-medium">
+                            {conversation.groupMetadata?.name || 
+                              <CopyableAddress address={conversation.peerAddress} />
+                            }
                           </div>
                           {conversation.groupMetadata && (
                             <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
@@ -156,7 +150,12 @@ function ChatContent() {
                         </div>
                         {conversation.groupMetadata && (
                           <div className="text-sm text-gray-500 truncate mt-1">
-                            Members: {conversation.groupMetadata.members.map(m => truncateEthAddress(m)).join(', ')}
+                            Members: {conversation.groupMetadata.members.map((m, index) => (
+                              <>
+                                {index > 0 && <span>, </span>}
+                                <CopyableAddress key={m} address={m} />
+                              </>
+                            ))}
                           </div>
                         )}
                         {conversation.sharedNFTs && conversation.sharedNFTs.length > 0 && (

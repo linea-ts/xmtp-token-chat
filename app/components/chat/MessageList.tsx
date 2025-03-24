@@ -1,6 +1,7 @@
 import { truncateEthAddress } from '@/app/utils/truncateEthAddress';
 import { useEffect, useRef } from 'react';
 import { utils } from 'ethers';
+import { CopyableAddress } from '../common/CopyableAddress';
 
 interface Message {
   id?: string;
@@ -61,7 +62,9 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
                     className={`p-3 rounded-2xl shadow-sm max-w-[80%] break-words
                       ${isMyMessage ? 'bg-blue-100' : 'bg-white'}`}
                   >
-                    <div className="text-xs text-gray-500 mb-1">{truncateEthAddress(msg.senderAddress)}</div>
+                    <div className="text-xs text-gray-500 mb-1">
+                      <CopyableAddress address={msg.senderAddress} />
+                    </div>
                     <div className="mb-1">{msg.content}</div>
                     <div className="text-xs text-gray-400">{messageTime} • {messageDate}</div>
                   </div>

@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { TokenInfo } from '@/app/utils/tokenUtils'
+import { CopyableAddress } from '../common/CopyableAddress'
 
 interface SharedNFTsListProps {
   nfts: TokenInfo[]
@@ -56,7 +57,7 @@ export const SharedNFTsList = ({ nfts }: SharedNFTsListProps) => {
               >
                 <div className="font-medium">{nft.name}</div>
                 <div className="text-xs text-gray-500">
-                  {truncateText(nft.contractAddress, 12)}
+                  <CopyableAddress address={nft.contractAddress} />
                 </div>
               </div>
             ))}
