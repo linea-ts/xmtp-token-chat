@@ -1,4 +1,4 @@
-import { Alchemy, Network } from 'alchemy-sdk';
+import { Alchemy, Network, OwnedNft } from 'alchemy-sdk';
 
 // Configure Alchemy SDK
 const config = {
@@ -12,6 +12,7 @@ export interface TokenInfo {
   contractAddress: string;
   contractName: string;
   tokenType: string;
+  name: string;
 }
 
 export async function getAllNFTs(walletAddress: string): Promise<TokenInfo[]> {
@@ -21,13 +22,14 @@ export async function getAllNFTs(walletAddress: string): Promise<TokenInfo[]> {
     // Create a Map to deduplicate by contract address
     const contractMap = new Map<string, TokenInfo>();
     
-    nftsResponse.ownedNfts.forEach(nft => {
+    nftsResponse.ownedNfts.forEach((nft: OwnedNft) => {
       const contractAddress = nft.contract.address.toLowerCase();
       if (!contractMap.has(contractAddress)) {
         contractMap.set(contractAddress, {
           contractAddress: contractAddress,
           contractName: nft.contract.name || 'Unknown Contract',
-          tokenType: nft.tokenType
+          tokenType: nft.tokenType,
+          name: nft.contract.name || 'Unknown NFT'
         });
       }
     });
