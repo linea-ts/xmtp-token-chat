@@ -210,6 +210,54 @@ export function useXmtp() {
         console.log('Using existing conversation with:', peerAddress)
         setCurrentConversation(conversation)
         setMessages(existingConversation.messages)
+        
+        // Set up message streaming for existing conversation
+        if (streamRef.current) {
+          streamRef.current[Symbol.asyncIterator]().return?.()
+        }
+        streamRef.current = await conversation.streamMessages()
+        
+        const handleNewMessages = async () => {
+          try {
+            for await (const msg of streamRef.current!) {
+              console.log('New message received:', msg)
+              const newMessage = {
+                senderAddress: msg.senderAddress,
+                content: msg.content as string,
+                sent: msg.sent,
+              }
+              
+              setMessages(prevMessages => {
+                // Check if message already exists to prevent duplicates
+                const messageExists = prevMessages.some(m => 
+                  m.senderAddress === newMessage.senderAddress && 
+                  m.content === newMessage.content &&
+                  m.sent.getTime() === newMessage.sent.getTime()
+                )
+                if (messageExists) return prevMessages
+                return [...prevMessages, newMessage]
+              })
+
+              setConversations(prevConvs => {
+                return prevConvs.map(conv => {
+                  if (conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()) {
+                    return {
+                      ...conv,
+                      messages: [...conv.messages, newMessage],
+                      preview: msg.content as string,
+                      lastMessage: msg.content as string
+                    }
+                  }
+                  return conv
+                })
+              })
+            }
+          } catch (error) {
+            console.error('Error in message stream:', error)
+          }
+        }
+
+        handleNewMessages()
         return
       }
 
@@ -223,20 +271,12 @@ export function useXmtp() {
       }
 
       setCurrentConversation(conversation)
-      
       setConversations(prev => [...prev, newConversation])
       
-      const messages = await conversation.messages()
-      setMessages(messages.map(msg => ({
-        senderAddress: msg.senderAddress,
-        content: msg.content as string,
-        sent: msg.sent,
-      })))
-
+      // Set up message streaming for new conversation
       if (streamRef.current) {
         streamRef.current[Symbol.asyncIterator]().return?.()
       }
-
       streamRef.current = await conversation.streamMessages()
       
       const handleNewMessages = async () => {
@@ -249,7 +289,17 @@ export function useXmtp() {
               sent: msg.sent,
             }
             
-            setMessages(prevMessages => [...prevMessages, newMessage])
+            setMessages(prevMessages => {
+              // Check if message already exists to prevent duplicates
+              const messageExists = prevMessages.some(m => 
+                m.senderAddress === newMessage.senderAddress && 
+                m.content === newMessage.content &&
+                m.sent.getTime() === newMessage.sent.getTime()
+              )
+              if (messageExists) return prevMessages
+              return [...prevMessages, newMessage]
+            })
+
             setConversations(prevConvs => {
               return prevConvs.map(conv => {
                 if (conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()) {
@@ -277,7 +327,7 @@ export function useXmtp() {
     } finally {
       setIsSwitchingChat(false)
     }
-  }, [client, conversations, userNFTs])
+  }, [client, conversations])
 
   const sendMessage = useCallback(async (message: string) => {
     if (!currentConversation) {
