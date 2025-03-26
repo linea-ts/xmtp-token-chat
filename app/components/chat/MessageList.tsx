@@ -29,7 +29,7 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
   }, [messages, isSwitchingChat]);
 
   return (
-    <div className="flex-1 overflow-y-auto mb-4 space-y-2">
+    <div className="flex-1 overflow-y-auto mb-4 space-y-2 h-[600px]">
       {isSwitchingChat ? (
         <div className="flex items-center justify-center h-full">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
