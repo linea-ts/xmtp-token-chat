@@ -28,24 +28,23 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
     scrollToBottom();
   }, [messages, isSwitchingChat]);
 
+  console.log('MessageList render - isSwitchingChat:', isSwitchingChat);
+
   return (
-    <div className="flex-1 overflow-y-auto mb-4 space-y-2 h-[600px]">
+    <div className="flex-1 overflow-y-auto">
       {isSwitchingChat ? (
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
+        <div className="flex flex-col items-center justify-center h-full space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-yellow-500 border-t-transparent"></div>
+          <p className="text-gray-500 text-lg">Loading messages...</p>
         </div>
       ) : (
-        <div className="animate-fade-in">
+        <div className="animate-fade-in space-y-2 p-4">
           {messages.map((msg, index) => {
             const currentAddress = (window as any).ethereum?.selectedAddress;
-            console.log('Message sender:', msg.senderAddress);
-            console.log('Current user:', currentAddress);
             
             const isMyMessage = currentAddress && 
               utils.getAddress(msg.senderAddress).toLowerCase() === 
               utils.getAddress(currentAddress).toLowerCase();
-            
-            console.log('Is my message?', isMyMessage);
 
             const messageTime = new Date(msg.sent).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const messageDate = new Date(msg.sent).toLocaleDateString();
@@ -56,7 +55,7 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
                 className="flex flex-col w-full"
               >
                 <div
-                  className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'} w-full mb-4`}
+                  className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'} w-full`}
                 >
                   <div
                     className={`p-3 rounded-2xl shadow-sm max-w-[80%] break-words
@@ -72,7 +71,6 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
               </div>
             );
           })}
-          {/* Add an empty div at the bottom for scrolling */}
           <div ref={messagesEndRef} />
         </div>
       )}

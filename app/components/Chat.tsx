@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useXmtp } from '../hooks/useXmtp'
 import { ethers } from 'ethers'
 import { ConnectBar } from './chat/layout/ConnectBar'
@@ -14,25 +14,18 @@ import { SharedNFTsList } from './chat/SharedNFTsList'
 import { CopyableAddress } from './common/CopyableAddress'
 import { TokenGroupManager } from './chat/TokenGroupManager'
 
-const truncateEthAddress = (address: string) => {
-  if (!address) return '';
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-};
-
 function ChatContent() {
   const { 
     connect, 
     disconnect, 
     sendMessage, 
     startChat, 
-    joinTokenGroup,
-    messages, 
     conversations, 
     isConnected, 
     error, 
-    setConversations, 
     isLoading, 
     isSwitchingChat,
+    setIsSwitchingChat,
     userNFTs,
     availableGroupChats,
     toggleGroupChat 
@@ -42,6 +35,7 @@ function ChatContent() {
   const [message, setMessage] = useState('')
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
+  const [isSelecting, setIsSelecting] = useState(false)
 
   const getUniqueConversationKey = (conversation: Conversation) => {
     if (conversation.groupMetadata) {
@@ -53,21 +47,30 @@ function ChatContent() {
   const selectConversation = async (conversation: Conversation) => {
     const conversationKey = getUniqueConversationKey(conversation);
     
-    // If already selected, do nothing
-    if (selectedConversationId === conversationKey) {
+    // If already selected or in process of selecting, do nothing
+    if (selectedConversationId === conversationKey || isSelecting) {
       return;
     }
 
-    setSelectedConversationId(conversationKey);
-    setCurrentMessages([]);
-    await startChat(conversation.peerAddress);
-  };
-
-  useEffect(() => {
-    if (selectedConversationId && messages) {
-      setCurrentMessages(messages);
+    try {
+      setIsSelecting(true);
+      setSelectedConversationId(conversationKey);
+      setCurrentMessages([]); // Clear messages immediately
+      setIsSwitchingChat(true);
+      
+      await new Promise(resolve => setTimeout(resolve, 450));
+      const messages = await startChat(conversation.peerAddress);
+      setCurrentMessages(messages || []); // Ensure we never set undefined
+    } catch (error) {
+      console.error('Error selecting conversation:', error);
+      // Reset states on error
+      setSelectedConversationId(null);
+      setCurrentMessages([]);
+    } finally {
+      setIsSwitchingChat(false);
+      setIsSelecting(false);
     }
-  }, [messages, selectedConversationId]);
+  };
 
   const handleConnect = async () => {
     await connect()
@@ -94,7 +97,7 @@ function ChatContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-screen flex flex-col overflow-hidden">
       <ConnectBar 
         address={(window as any).ethereum?.selectedAddress || ''}
         onDisconnect={disconnect}
@@ -102,9 +105,9 @@ function ChatContent() {
 
       <Header />
 
-      <div className="flex-1 container mx-auto p-4">
-        <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-1 border rounded p-4">
+      <div className="flex-1 container mx-auto px-4 pb-2 pt-2 min-h-0">
+        <div className="grid grid-cols-3 gap-4 h-full">
+          <div className="col-span-1 border rounded p-3 flex flex-col overflow-hidden">
             <TokenGroupManager
               userNFTs={userNFTs}
               availableGroupChats={availableGroupChats}
@@ -127,58 +130,65 @@ function ChatContent() {
               </button>
             </div>
 
-            <div>
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
               <h2 className="font-semibold mb-2">Recent Chats</h2>
-              <div className="space-y-2">
-                {conversations.map((conversation) => {
-                  const conversationKey = getUniqueConversationKey(conversation);
-                  const isSelected = selectedConversationId === conversationKey;
-                  
-                  return (
-                    <div
-                      key={conversationKey}
-                      onClick={() => selectConversation(conversation)}
-                      className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 ${
-                        isSelected ? 'bg-yellow-50 border-2 border-yellow-500' : 'border border-gray-200'
-                      } flex justify-between items-center`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="font-medium">
-                            {conversation.groupMetadata?.name || 
-                              <CopyableAddress address={conversation.peerAddress} />
-                            }
+              <div className="overflow-y-auto flex-1">
+                <div className="space-y-2">
+                  {conversations.map((conversation) => {
+                    const conversationKey = getUniqueConversationKey(conversation);
+                    const isSelected = selectedConversationId === conversationKey;
+                    
+                    return (
+                      <div
+                        key={conversationKey}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          if (!isSelecting) {
+                            selectConversation(conversation);
+                          }
+                        }}
+                        className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 ${
+                          isSelected ? 'bg-yellow-50 border-2 border-yellow-500' : 'border border-gray-200'
+                        } flex justify-between items-center`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium">
+                              {conversation.groupMetadata?.name || 
+                                <CopyableAddress address={conversation.peerAddress} />
+                              }
+                            </div>
+                            {conversation.groupMetadata && (
+                              <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                                {conversation.groupMetadata.members.length} members
+                              </span>
+                            )}
                           </div>
                           {conversation.groupMetadata && (
-                            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
-                              {conversation.groupMetadata.members.length} members
-                            </span>
+                            <div className="text-sm text-gray-500 truncate mt-1">
+                              Members: {conversation.groupMetadata.members.map((m, index) => (
+                                <>
+                                  {index > 0 && <span>, </span>}
+                                  <CopyableAddress key={m} address={m} />
+                                </>
+                              ))}
+                            </div>
+                          )}
+                          {conversation.sharedNFTs && conversation.sharedNFTs.length > 0 && (
+                            <div className="mt-1 text-left">
+                              <SharedNFTsList nfts={conversation.sharedNFTs} />
+                            </div>
                           )}
                         </div>
-                        {conversation.groupMetadata && (
-                          <div className="text-sm text-gray-500 truncate mt-1">
-                            Members: {conversation.groupMetadata.members.map((m, index) => (
-                              <>
-                                {index > 0 && <span>, </span>}
-                                <CopyableAddress key={m} address={m} />
-                              </>
-                            ))}
-                          </div>
-                        )}
-                        {conversation.sharedNFTs && conversation.sharedNFTs.length > 0 && (
-                          <div className="mt-1 text-left">
-                            <SharedNFTsList nfts={conversation.sharedNFTs} />
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="col-span-2 border rounded p-4 flex flex-col h-[calc(100vh-200px)] bg-gray-100">
+          <div className="col-span-2 border rounded p-3 flex flex-col min-h-0 bg-gray-100">
             {error && <div className="text-red-500 mb-4">{error}</div>}
             
             <MessageList 

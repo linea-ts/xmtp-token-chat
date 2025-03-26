@@ -1,7 +1,9 @@
+import { FormEvent } from 'react';
+
 interface MessageInputProps {
   message: string;
   setMessage: (message: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
+  onSubmit: (e: FormEvent) => void;
 }
 
 export const MessageInput = ({ message, setMessage, onSubmit }: MessageInputProps) => {
