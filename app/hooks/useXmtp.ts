@@ -169,12 +169,15 @@ export function useXmtp() {
       if (
         typeof window === 'undefined' || 
         !window.ethereum || 
-        !window.ethereum.selectedAddress || 
         client || 
         initializingRef.current ||
         wasExplicitlyDisconnected ||
         wasDisconnected
       ) return
+      
+      // Only attempt auto-connect if we already have a connected account
+      const accounts = await window.ethereum.request({ method: 'eth_accounts' })
+      if (!accounts || accounts.length === 0) return
       
       try {
         const provider = new ethers.providers.Web3Provider(window.ethereum)
@@ -238,8 +241,6 @@ export function useXmtp() {
     }
 
     try {
-      setIsSwitchingChat(true)
-      
       const conversation = await client.conversations.newConversation(peerAddress)
       const uniqueId = `direct:${peerAddress.toLowerCase()}:${conversation.topic}`
       
@@ -250,7 +251,6 @@ export function useXmtp() {
       if (existingConversation) {
         console.log('Using existing conversation with:', peerAddress)
         setCurrentConversation(conversation)
-        setMessages(existingConversation.messages)
         
         // Set up message streaming for existing conversation
         if (streamRef.current) {
@@ -269,7 +269,7 @@ export function useXmtp() {
         }
 
         handleNewMessages()
-        return
+        return existingConversation.messages
       }
 
       console.log('Creating new conversation entry for:', peerAddress)
@@ -292,7 +292,6 @@ export function useXmtp() {
         sent: msg.sent,
       }))
       
-      setMessages(formattedMessages)
       setConversations(prev => prev.map(conv => 
         conv.id === uniqueId 
           ? { ...conv, messages: formattedMessages }
@@ -316,12 +315,12 @@ export function useXmtp() {
       }
 
       handleNewMessages()
+      return formattedMessages
 
     } catch (error) {
       console.error('Error starting chat:', error)
       setError('Failed to start chat')
-    } finally {
-      setIsSwitchingChat(false)
+      return []
     }
   }, [client, conversations, handleNewStreamMessage])
 
@@ -685,8 +684,8 @@ export function useXmtp() {
     isConnected,
     error,
     isLoading,
-    setIsLoading,
     isSwitchingChat,
+    setIsSwitchingChat,
     userNFTs,
     availableGroupChats,
     toggleGroupChat,
