@@ -7,12 +7,12 @@ import { ConnectBar } from './chat/layout/ConnectBar'
 import { Header } from './chat/layout/Header'
 import { Footer } from './chat/layout/Footer'
 import { DisconnectedState } from './chat/DisconnectedState'
-import { GroupCreationModal } from './chat/GroupCreationModal'
 import { MessageList } from './chat/MessageList'
 import { MessageInput } from './chat/MessageInput'
 import { Message, Conversation } from '../types/chat'
 import { SharedNFTsList } from './chat/SharedNFTsList'
 import { CopyableAddress } from './common/CopyableAddress'
+import { TokenGroupManager } from './chat/TokenGroupManager'
 
 const truncateEthAddress = (address: string) => {
   if (!address) return '';
@@ -20,12 +20,26 @@ const truncateEthAddress = (address: string) => {
 };
 
 function ChatContent() {
-  const { connect, disconnect, sendMessage, startChat, createGroup, messages, conversations, isConnected, error, setConversations, isLoading, setIsLoading, isSwitchingChat } = useXmtp()
+  const { 
+    connect, 
+    disconnect, 
+    sendMessage, 
+    startChat, 
+    joinTokenGroup,
+    messages, 
+    conversations, 
+    isConnected, 
+    error, 
+    setConversations, 
+    isLoading, 
+    isSwitchingChat,
+    userNFTs,
+    availableGroupChats,
+    toggleGroupChat 
+  } = useXmtp()
+  
   const [recipientAddress, setRecipientAddress] = useState('')
   const [message, setMessage] = useState('')
-  const [showGroupModal, setShowGroupModal] = useState(false)
-  const [groupName, setGroupName] = useState('')
-  const [groupMembers, setGroupMembers] = useState('')
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
 
@@ -71,19 +85,6 @@ function ChatContent() {
     setMessage('')
   }
 
-  const handleCreateGroup = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const members = groupMembers.split(',').map(addr => addr.trim())
-    if (members.some(addr => !ethers.utils.isAddress(addr))) {
-      alert('Please enter valid Ethereum addresses')
-      return
-    }
-    await createGroup(members, groupName)
-    setShowGroupModal(false)
-    setGroupName('')
-    setGroupMembers('')
-  }
-
   const getMessageId = (msg: Message, index: number) => {
     return `${msg.senderAddress}-${msg.sent?.getTime() || Date.now()}-${index}`;
   };
@@ -99,11 +100,17 @@ function ChatContent() {
         onDisconnect={disconnect}
       />
 
-      <Header onCreateGroup={() => setShowGroupModal(true)} />
+      <Header />
 
       <div className="flex-1 container mx-auto p-4">
         <div className="grid grid-cols-3 gap-4">
           <div className="col-span-1 border rounded p-4">
+            <TokenGroupManager
+              userNFTs={userNFTs}
+              availableGroupChats={availableGroupChats}
+              onToggleGroup={toggleGroupChat}
+            />
+
             <div className="mb-4">
               <input
                 type="text"
@@ -188,16 +195,6 @@ function ChatContent() {
           </div>
         </div>
       </div>
-
-      <GroupCreationModal
-        isOpen={showGroupModal}
-        onClose={() => setShowGroupModal(false)}
-        onSubmit={handleCreateGroup}
-        groupName={groupName}
-        setGroupName={setGroupName}
-        groupMembers={groupMembers}
-        setGroupMembers={setGroupMembers}
-      />
 
       <Footer />
     </div>
