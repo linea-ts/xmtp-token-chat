@@ -326,13 +326,17 @@ export function useXmtp() {
         nft.contractAddress.toLowerCase() === contractAddress.toLowerCase()
       )
 
-      // Create a new XMTP group with initial permissions
-      const group = await client.conversations.newGroup(
-        [/* member inbox IDs */],
+      // Create a new XMTP conversation with group metadata
+      const group = await client.conversations.newConversation(
+        contractAddress,
         {
-          name: tokenInfo?.contractName || `Token Holders: ${contractAddress}`,
-          description: `Group chat for holders of tokens from contract ${contractAddress}`,
-          permissionLevel: "admin_only", // or 'all_members'
+          conversationId: groupId,
+          metadata: {
+            name: tokenInfo?.contractName || `Token Holders: ${contractAddress}`,
+            description: `Group chat for holders of tokens from contract ${contractAddress}`,
+            members: JSON.stringify([]),
+            type: 'token_group'
+          }
         }
       )
 
