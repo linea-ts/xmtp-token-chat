@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useXmtp } from '../hooks/useXmtp'
 import { ethers } from 'ethers'
 import { ConnectBar } from './chat/layout/ConnectBar'
@@ -44,6 +44,18 @@ function ChatContent() {
     return conversation.id;
   };
 
+  useEffect(() => {
+    if (!selectedConversationId) return;
+    
+    const selectedConv = conversations.find(conv => 
+      getUniqueConversationKey(conv) === selectedConversationId
+    );
+    
+    if (selectedConv) {
+      setCurrentMessages(selectedConv.messages);
+    }
+  }, [selectedConversationId, conversations]);
+
   const selectConversation = async (conversation: Conversation) => {
     const conversationKey = getUniqueConversationKey(conversation);
     
@@ -55,15 +67,13 @@ function ChatContent() {
     try {
       setIsSelecting(true);
       setSelectedConversationId(conversationKey);
-      setCurrentMessages([]); // Clear messages immediately
+      setCurrentMessages(conversation.messages); // Set initial messages immediately
       setIsSwitchingChat(true);
       
       await new Promise(resolve => setTimeout(resolve, 450));
-      const messages = await startChat(conversation.peerAddress);
-      setCurrentMessages(messages || []); // Ensure we never set undefined
+      await startChat(conversation.peerAddress);
     } catch (error) {
       console.error('Error selecting conversation:', error);
-      // Reset states on error
       setSelectedConversationId(null);
       setCurrentMessages([]);
     } finally {
@@ -83,10 +93,19 @@ function ChatContent() {
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    await sendMessage(message)
-    setMessage('')
-  }
+    e.preventDefault();
+    if (!message.trim()) return;
+    
+    const newMessage = {
+      content: message,
+      senderAddress: (window as any).ethereum?.selectedAddress,
+      sent: new Date()
+    };
+    
+    setCurrentMessages(prev => [...prev, newMessage]);
+    await sendMessage(message);
+    setMessage('');
+  };
 
   const getMessageId = (msg: Message, index: number) => {
     return `${msg.senderAddress}-${msg.sent?.getTime() || Date.now()}-${index}`;
