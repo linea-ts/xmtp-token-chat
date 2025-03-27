@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useXmtp } from '../hooks/useXmtp'
 import { ethers } from 'ethers'
 import { ConnectBar } from './chat/layout/ConnectBar'
@@ -10,9 +10,9 @@ import { DisconnectedState } from './chat/DisconnectedState'
 import { MessageList } from './chat/MessageList'
 import { MessageInput } from './chat/MessageInput'
 import { Message, Conversation } from '../types/chat'
-import { SharedNFTsList } from './chat/SharedNFTsList'
 import { CopyableAddress } from './common/CopyableAddress'
 import { TokenGroupManager } from './chat/TokenGroupManager'
+import { SharedNFTsPreview } from './chat/SharedNFTsPreview'
 
 function ChatContent() {
   const { 
@@ -29,7 +29,8 @@ function ChatContent() {
     userNFTs,
     availableGroupChats,
     toggleGroupChat,
-    markConversationAsRead
+    markConversationAsRead,
+    isLoadingConversations
   } = useXmtp()
   
   const [recipientAddress, setRecipientAddress] = useState('')
@@ -38,6 +39,8 @@ function ChatContent() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
   const [isSelecting, setIsSelecting] = useState(false)
+  const [startChatError, setStartChatError] = useState<string | null>(null)
+  const startChatTimeoutRef = useRef<NodeJS.Timeout>()
 
   const getUniqueConversationKey = (conversation: Conversation) => {
     if (conversation.groupMetadata) {
@@ -102,10 +105,24 @@ function ChatContent() {
 
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!recipientAddress || !isValidEthAddress(recipientAddress)) return;
-    await startChat(recipientAddress)
-    setRecipientAddress('')
-    setDisplayAddress('')
+    if (!recipientAddress) return;
+    
+    try {
+      const result = await startChat(recipientAddress)
+      if (result) {
+        setRecipientAddress('')
+        setDisplayAddress('')
+        setStartChatError(null)
+      }
+    } catch (error: any) {
+      setStartChatError(error.message || 'Failed to start chat')
+      if (startChatTimeoutRef.current) {
+        clearTimeout(startChatTimeoutRef.current)
+      }
+      startChatTimeoutRef.current = setTimeout(() => {
+        setStartChatError(null)
+      }, 3000)
+    }
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -126,6 +143,14 @@ function ChatContent() {
   const getMessageId = (msg: Message, index: number) => {
     return `${msg.senderAddress}-${msg.sent?.getTime() || Date.now()}-${index}`;
   };
+
+  useEffect(() => {
+    return () => {
+      if (startChatTimeoutRef.current) {
+        clearTimeout(startChatTimeoutRef.current)
+      }
+    }
+  }, [])
 
   if (!isConnected) {
     return <DisconnectedState isLoading={isLoading} onConnect={handleConnect} />;
@@ -149,7 +174,7 @@ function ChatContent() {
               onToggleGroup={toggleGroupChat}
             />
 
-            <div className="mt-4 mb-4 pt-4 border-t border-gray-200">
+            <div className="mt-4 mb-4 pt-4 border-t border-gray-200 relative">
               <input
                 type="text"
                 placeholder="Enter wallet address"
@@ -169,46 +194,60 @@ function ChatContent() {
               />
               <button
                 onClick={handleStartChat}
-                className={`mt-2 w-full ${
-                  !recipientAddress || !isValidEthAddress(recipientAddress)
-                    ? 'bg-yellow-100 text-yellow-500 opacity-60 cursor-not-allowed'
-                    : 'btn-primary'
-                }`}
-                disabled={!recipientAddress || !isValidEthAddress(recipientAddress)}
+                className="mt-2 w-full btn-primary"
               >
                 Start Chat
               </button>
+              {startChatError && (
+                <div className="absolute left-0 right-0 mt-2 p-2 bg-red-100 text-red-700 text-sm rounded-md shadow-md animate-fade-in">
+                  {startChatError}
+                </div>
+              )}
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col min-h-0 pt-4 border-t border-gray-200">
               <h2 className="font-semibold mb-2">Recent Chats</h2>
-              <div className="flex-1 overflow-y-auto space-y-2">
-                {conversations.map((conversation) => {
-                  const conversationKey = getUniqueConversationKey(conversation);
-                  const isSelected = selectedConversationId === conversationKey;
-                  
-                  return (
-                    <div
-                      key={conversationKey}
-                      onClick={() => !isSelecting && selectConversation(conversation)}
-                      className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 relative mb-2 min-h-[68px]
-                        ${isSelected ? 'bg-yellow-50 border-2 border-yellow-500' : 'border border-gray-200'}
-                        ${conversation.unreadCount > 0 ? 'bg-blue-50' : ''}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div className="font-medium">
-                              {conversation.groupMetadata?.name || 
-                                <CopyableAddress address={conversation.peerAddress} />
-                              }
+              {isLoadingConversations ? (
+                <div className="flex flex-col items-center justify-center space-y-4">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-yellow-500 border-t-transparent"></div>
+                  <p className="text-gray-500 text-lg">Loading conversations...</p>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto space-y-2">
+                  {conversations.map((conversation) => {
+                    const conversationKey = getUniqueConversationKey(conversation);
+                    const isSelected = selectedConversationId === conversationKey;
+                    
+                    return (
+                      <div
+                        key={conversationKey}
+                        onClick={() => !isSelecting && selectConversation(conversation)}
+                        className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 relative mb-2 min-h-[68px]
+                          ${isSelected ? 'bg-yellow-50 border-2 border-yellow-500' : 'border border-gray-200'}
+                          ${conversation.unreadCount > 0 ? 'bg-blue-50' : ''}`}
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium">
+                                {conversation.groupMetadata?.name || 
+                                  <CopyableAddress address={conversation.peerAddress} />
+                                }
+                              </div>
+                              {conversation.unreadCount > 0 && (
+                                <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
+                                  {conversation.unreadCount}
+                                </span>
+                              )}
                             </div>
-                            {conversation.unreadCount > 0 && (
-                              <span className="px-2 py-0.5 bg-blue-500 text-white text-xs rounded-full">
-                                {conversation.unreadCount}
-                              </span>
-                            )}
                           </div>
+                          
+                          {conversation.sharedNFTs && (
+                            <div className="mt-1">
+                              <SharedNFTsPreview nfts={conversation.sharedNFTs} />
+                            </div>
+                          )}
+                          
                           {conversation.preview && (
                             <div className="text-sm text-gray-500 truncate mt-1">
                               {conversation.preview}
@@ -228,10 +267,10 @@ function ChatContent() {
                           )}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

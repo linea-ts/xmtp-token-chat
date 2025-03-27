@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import type { Client, Conversation as XMTPConversation, DecodedMessage, Stream } from '@xmtp/xmtp-js'
 import { ethers } from 'ethers'
 import { switchToLinea, validateLineaNetwork, setupNetworkMonitoring } from '../utils/chainValidation'
-import { TokenInfo, getAllNFTs, hasMatchingNFTs } from '../utils/tokenUtils'
+import { TokenInfo, getAllNFTs, hasMatchingNFTs, getSharedNFTs } from '../utils/tokenUtils'
 import { Message, Conversation } from '../types/chat'
 
 interface ConversationData {
@@ -19,6 +19,7 @@ interface ConversationData {
   }
   unreadCount: number
   lastMessageTimestamp: number
+  sharedNFTs: TokenInfo[]
 }
 
 export function useXmtp() {
@@ -46,6 +47,13 @@ export function useXmtp() {
   }>({})
   const streamsRef = useRef<Map<string, Stream<DecodedMessage>>>(new Map())
   const conversationStreamRef = useRef<any>(null)
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false)
+  const nftCacheRef = useRef<{
+    [address: string]: {
+      nfts: TokenInfo[];
+      timestamp: number;
+    };
+  }>({})
 
   const disconnect = useCallback(async () => {
     // Clean up conversation stream
@@ -185,64 +193,131 @@ export function useXmtp() {
     )
   }, [])
 
-  const handleNewStreamMessage = useCallback((msg: DecodedMessage, peerAddress: string) => {
-    const newMessage = {
-      senderAddress: msg.senderAddress,
-      content: msg.content as string,
-      sent: msg.sent,
-    }
+  const getConversationId = (peerAddress: string, topic: string, isGroup = false) => {
+    return isGroup ? `group:${peerAddress}` : `direct:${peerAddress.toLowerCase()}:${topic}`;
+  };
+
+  const getCachedNFTs = async (address: string) => {
+    const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+    const cached = nftCacheRef.current[address];
     
-    const isFromMe = msg.senderAddress.toLowerCase() === client?.address?.toLowerCase()
-    
-    setMessages(prevMessages => {
-      const messageExists = prevMessages.some(m => 
-        m.senderAddress === newMessage.senderAddress && 
-        m.content === newMessage.content &&
-        Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 5000
-      )
-      if (messageExists) return prevMessages
-      return [...prevMessages, newMessage]
-    })
-
-    setConversations(prevConvs => {
-      const updatedConvs = prevConvs.map(conv => {
-        if (conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()) {
-          const messageExists = conv.messages.some(m => 
-            m.senderAddress === newMessage.senderAddress && 
-            m.content === newMessage.content &&
-            Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 5000
-          )
-          if (messageExists) return conv
-
-          const shouldIncrementUnread = !isFromMe && 
-            currentConversation?.peerAddress.toLowerCase() !== peerAddress.toLowerCase()
-
-          return {
-            ...conv,
-            messages: [...conv.messages, newMessage],
-            preview: msg.content as string,
-            lastMessage: msg.content as string,
-            lastMessageTimestamp: msg.sent.getTime(),
-            unreadCount: shouldIncrementUnread ? (conv.unreadCount || 0) + 1 : conv.unreadCount || 0
-          }
-        }
-        return conv
-      })
-      
-      // Sort conversations by most recent message
-      return updatedConvs.sort((a, b) => (b.lastMessageTimestamp || 0) - (a.lastMessageTimestamp || 0))
-    })
-  }, [client?.address, currentConversation])
-
-  const startChat = useCallback(async (peerAddress: string) => {
-    if (!client) {
-      setError('Please connect your wallet first')
-      return
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      return cached.nfts;
     }
+
+    const nfts = await getAllNFTs(address);
+    nftCacheRef.current[address] = {
+      nfts,
+      timestamp: Date.now()
+    };
+    
+    return nfts;
+  };
+
+  const handleNewStreamMessage = useCallback(async (msg: DecodedMessage, peerAddress: string) => {
+    if (!client) return
 
     try {
+      const userAddress = await client.address
+      const userNFTs = await getCachedNFTs(userAddress)
+      const peerNFTs = await getCachedNFTs(peerAddress)
+      const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs)
+
+      if (sharedNFTs.length === 0) {
+        console.log('Message dropped - no shared NFTs between', {
+          userAddress,
+          peerAddress,
+          userNFTCount: userNFTs.length,
+          peerNFTCount: peerNFTs.length
+        })
+        return
+      }
+
+      const newMessage = {
+        senderAddress: msg.senderAddress,
+        content: msg.content as string,
+        sent: msg.sent,
+      }
+      
+      const isFromMe = msg.senderAddress.toLowerCase() === client?.address?.toLowerCase()
+      
+      setMessages(prevMessages => {
+        const messageExists = prevMessages.some(m => 
+          m.senderAddress === newMessage.senderAddress && 
+          m.content === newMessage.content &&
+          Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 5000
+        )
+        if (messageExists) return prevMessages
+        return [...prevMessages, newMessage]
+      })
+
+      setConversations(prevConvs => {
+        const updatedConvs = prevConvs.map(conv => {
+          if (conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()) {
+            const messageExists = conv.messages.some(m => 
+              m.senderAddress === newMessage.senderAddress && 
+              m.content === newMessage.content &&
+              Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 5000
+            )
+            if (messageExists) return conv
+
+            const shouldIncrementUnread = !isFromMe && 
+              currentConversation?.peerAddress.toLowerCase() !== peerAddress.toLowerCase()
+
+            return {
+              ...conv,
+              messages: [...conv.messages, newMessage],
+              preview: msg.content as string,
+              lastMessage: msg.content as string,
+              lastMessageTimestamp: msg.sent.getTime(),
+              unreadCount: shouldIncrementUnread ? (conv.unreadCount || 0) + 1 : conv.unreadCount || 0
+            }
+          }
+          return conv
+        })
+        
+        // Sort conversations by most recent message
+        return updatedConvs.sort((a, b) => (b.lastMessageTimestamp || 0) - (a.lastMessageTimestamp || 0))
+      })
+    } catch (error) {
+      console.error('Error processing new message:', error)
+    }
+  }, [client?.address, currentConversation])
+
+  const startChat = useCallback(async (addressInput: string) => {
+    if (!client) return null
+    
+    try {
+      const peerAddress = ethers.utils.getAddress(addressInput).toLowerCase()
+      const userAddress = await client.address
+      
+      if (peerAddress === userAddress.toLowerCase()) {
+        throw new Error("Cannot start conversation with yourself")
+      }
+
+      // Enhanced NFT validation with more specific errors
+      let sharedNFTs: TokenInfo[] = [] // Define sharedNFTs here
+      try {
+        const userNFTs = await getCachedNFTs(userAddress)
+        const peerNFTs = await getCachedNFTs(peerAddress)
+        sharedNFTs = getSharedNFTs(userNFTs, peerNFTs) // Assign the result to sharedNFTs
+
+        if (sharedNFTs.length === 0) {
+          if (userNFTs.length === 0) {
+            throw new Error("You don't own any NFTs")
+          }
+          if (peerNFTs.length === 0) {
+            throw new Error("The recipient doesn't own any NFTs")
+          }
+          throw new Error("You don't share any NFTs with this address")
+        }
+      } catch (nftError: any) {
+        console.error('NFT validation error:', nftError)
+        throw new Error(nftError.message || "Failed to validate NFTs")
+      }
+
       const conversation = await client.conversations.newConversation(peerAddress)
-      const uniqueId = `direct:${peerAddress.toLowerCase()}:${conversation.topic}`
+      const uniqueId = getConversationId(peerAddress, conversation.topic)
       
       const existingConversation = conversations.find(conv => 
         !conv.groupMetadata && conv.id === uniqueId
@@ -264,6 +339,7 @@ export function useXmtp() {
         lastMessage: '',
         unreadCount: 0,
         lastMessageTimestamp: Date.now(),
+        sharedNFTs,
       }
 
       setCurrentConversation(conversation)
@@ -287,20 +363,29 @@ export function useXmtp() {
       await setupStreamForConversation(conversation)
       return formattedMessages
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error starting chat:', error)
-      setError('Failed to start chat')
-      return []
+      throw error
     }
   }, [client, conversations, handleNewStreamMessage])
 
   const sendMessage = useCallback(async (message: string) => {
     if (!currentConversation) {
-      setError('No active conversation')
-      return
+      throw new Error('No active conversation')
     }
 
     try {
+      // Validate NFTs before sending
+      const userAddress = await client?.address!
+      const peerAddress = currentConversation.peerAddress
+      const userNFTs = await getCachedNFTs(userAddress)
+      const peerNFTs = await getCachedNFTs(peerAddress)
+      const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs)
+
+      if (sharedNFTs.length === 0) {
+        throw new Error("Message cannot be sent - you no longer share any tokens with this address")
+      }
+
       const sentMessage = await currentConversation.send(message)
       
       const newMessage = {
@@ -343,9 +428,9 @@ export function useXmtp() {
           return conv
         })
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error)
-      setError('Failed to send message')
+      throw error
     }
   }, [currentConversation, client])
 
@@ -388,6 +473,7 @@ export function useXmtp() {
         lastMessage: '',
         unreadCount: 0,
         lastMessageTimestamp: Date.now(),
+        sharedNFTs: [],
       }
 
       // Set up stream for the group
@@ -402,85 +488,112 @@ export function useXmtp() {
   }, [client, userNFTs])
 
   const loadConversations = async (xmtp: Client) => {
+    setIsLoadingConversations(true)
     try {
-      const convos = await xmtp.conversations.list()
-      console.log('Raw conversations:', convos)
+      const allConversations = await xmtp.conversations.list()
+      const userAddress = await xmtp.address
+      const userNFTs = await getCachedNFTs(userAddress)
       
-      const conversationsData = await Promise.all(
-        convos.map(async (conversation): Promise<ConversationData | null> => {
-          const isGroup = conversation.context?.conversationId?.startsWith('group:')
-          
-          // For 1-on-1 chats, just return the conversation without NFT filtering
-          if (!isGroup) {
-            const messages = await conversation.messages()
-            // Include conversation topic in the ID to ensure uniqueness
-            const uniqueId = `direct:${conversation.peerAddress.toLowerCase()}:${conversation.context?.conversationId || conversation.topic}`
-            return {
-              id: uniqueId,
-              peerAddress: conversation.peerAddress,
-              messages: messages.map(msg => ({
-                senderAddress: msg.senderAddress,
-                content: msg.content as string,
-                sent: msg.sent,
-              })),
-              preview: messages[messages.length - 1]?.content as string || '',
-              lastMessage: messages[messages.length - 1]?.content as string || '',
-              unreadCount: 0,
-              lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
-            }
-          }
+      const validConversations: ConversationData[] = []
+      const BATCH_SIZE = 5;
 
-          // Keep existing group chat logic
-          if (isGroup) {
-            const groupId = conversation.context?.conversationId
-            const isTokenGroup = availableGroupChats.some(g => 
-              g.joined && `group:${g.contractAddress}` === groupId
-            )
-            if (!isTokenGroup) return null
+      for (let i = 0; i < allConversations.length; i += BATCH_SIZE) {
+        const batch = allConversations.slice(i, i + BATCH_SIZE)
+        const batchResults = await Promise.all(
+          batch.map(async (conversation): Promise<ConversationData | null> => {
+            const isGroup = conversation.context?.conversationId?.startsWith('group:')
+            const peerAddress = conversation.peerAddress.toLowerCase()
+            
+            if (!isGroup) {
+              if (peerAddress === userAddress.toLowerCase()) return null;
 
-            const messages = await conversation.messages()
-            return {
-              id: groupId || `group:${conversation.context?.metadata?.name}`,
-              peerAddress: conversation.peerAddress,
-              messages: messages.map(msg => ({
-                senderAddress: msg.senderAddress,
-                content: msg.content as string,
-                sent: msg.sent,
-              })),
-              groupMetadata: {
-                name: conversation.context?.metadata?.name || 'Unnamed Group',
-                members: JSON.parse(conversation.context?.metadata?.members || '[]')
-              },
-              preview: messages[messages.length - 1]?.content as string || '',
-              lastMessage: messages[messages.length - 1]?.content as string || '',
-              unreadCount: 0,
-              lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
+              const peerNFTs = await getCachedNFTs(peerAddress)
+              const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs)
+              
+              // Skip if no shared NFTs
+              if (sharedNFTs.length === 0) return null;
+
+              const messages = await conversation.messages()
+              const uniqueId = getConversationId(peerAddress, conversation.topic)
+              
+              return {
+                id: uniqueId,
+                peerAddress,
+                messages: messages.map(msg => ({
+                  senderAddress: msg.senderAddress,
+                  content: msg.content as string,
+                  sent: msg.sent,
+                })),
+                preview: messages[messages.length - 1]?.content as string || '',
+                lastMessage: messages[messages.length - 1]?.content as string || '',
+                unreadCount: 0,
+                lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
+                sharedNFTs,
+              }
             }
-          }
-          
-          return null
-        })
+
+            // Keep existing group chat logic unchanged
+            if (isGroup) {
+              const groupId = conversation.context?.conversationId
+              const isTokenGroup = availableGroupChats.some(g => 
+                g.joined && `group:${g.contractAddress}` === groupId
+              )
+              if (!isTokenGroup) return null;
+
+              const messages = await conversation.messages()
+              return {
+                id: groupId || `group:${conversation.context?.metadata?.name}`,
+                peerAddress: conversation.peerAddress,
+                messages: messages.map(msg => ({
+                  senderAddress: msg.senderAddress,
+                  content: msg.content as string,
+                  sent: msg.sent,
+                })),
+                groupMetadata: {
+                  name: conversation.context?.metadata?.name || 'Unnamed Group',
+                  members: JSON.parse(conversation.context?.metadata?.members || '[]')
+                },
+                preview: messages[messages.length - 1]?.content as string || '',
+                lastMessage: messages[messages.length - 1]?.content as string || '',
+                unreadCount: 0,
+                lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
+                sharedNFTs: [],
+              }
+            }
+            
+            return null
+          })
+        )
+
+        validConversations.push(...batchResults.filter(Boolean) as ConversationData[])
+      }
+
+      // Remove duplicates and sort
+      const uniqueConversations = validConversations.reduce((acc, current) => {
+        const exists = acc.find(conv => 
+          conv.peerAddress.toLowerCase() === current.peerAddress.toLowerCase()
+        )
+        if (!exists) {
+          acc.push(current)
+        }
+        return acc
+      }, [] as ConversationData[])
+
+      const sortedConversations = uniqueConversations.sort((a, b) => 
+        (b.lastMessageTimestamp || 0) - (a.lastMessageTimestamp || 0)
       )
-
-      const validConversations = conversationsData.filter((conv): conv is ConversationData => conv !== null)
-      const sortedConversations = validConversations.sort((a, b) => {
-        const aTime = a.messages[a.messages.length - 1]?.sent.getTime() || 0
-        const bTime = b.messages[b.messages.length - 1]?.sent.getTime() || 0
-        return bTime - aTime
-      })
       
-      console.log('Final filtered conversations:', sortedConversations)
-
-      // Set conversations first
       setConversations(sortedConversations)
 
-      // Then set up streams for each conversation
-      for (const conversation of convos) {
+      // Set up streams for each conversation
+      for (const conversation of allConversations) {
         await setupStreamForConversation(conversation)
       }
     } catch (error) {
       console.error('Error loading conversations:', error)
       setError('Failed to load conversations')
+    } finally {
+      setIsLoadingConversations(false)
     }
   }
 
@@ -542,7 +655,7 @@ export function useXmtp() {
 
     try {
       const userAddress = await client.address
-      const currentNFTs = await getAllNFTs(userAddress)
+      const currentNFTs = await getCachedNFTs(userAddress)
       
       const hasToken = currentNFTs.some(nft => 
         nft.contractAddress.toLowerCase() === contractAddress.toLowerCase()
@@ -592,34 +705,44 @@ export function useXmtp() {
 
   const setupConversationStream = async (xmtp: Client) => {
     try {
-      // Clean up existing stream if it exists
       if (conversationStreamRef.current) {
         conversationStreamRef.current[Symbol.asyncIterator]().return?.()
       }
 
-      // Start streaming new conversations
       conversationStreamRef.current = await xmtp.conversations.stream()
       
       const handleNewConversations = async () => {
         try {
           for await (const conversation of conversationStreamRef.current) {
-            console.log('New conversation detected:', conversation)
-            
+            const peerAddress = conversation.peerAddress.toLowerCase()
             const isGroup = conversation.context?.conversationId?.startsWith('group:')
-            const uniqueId = isGroup 
-              ? conversation.context?.conversationId 
-              : `direct:${conversation.peerAddress.toLowerCase()}:${conversation.topic}`
+            const conversationId = getConversationId(peerAddress, conversation.topic, isGroup)
 
-            // Check if conversation already exists
-            const exists = conversations.some(conv => conv.id === uniqueId)
-            if (exists) continue
+            // Check for duplicates
+            const existingConversation = conversations.find(conv => 
+              conv.peerAddress.toLowerCase() === peerAddress || 
+              conv.id === conversationId
+            )
+
+            if (existingConversation) {
+              await setupStreamForConversation(conversation)
+              continue
+            }
 
             // For 1-on-1 chats
             if (!isGroup) {
+              const userAddress = await xmtp.address
+              const userNFTs = await getCachedNFTs(userAddress)
+              const peerNFTs = await getCachedNFTs(peerAddress)
+              const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs)
+
+              // Skip if no shared NFTs
+              if (sharedNFTs.length === 0) continue;
+
               const messages = await conversation.messages()
               const newConversation: ConversationData = {
-                id: uniqueId,
-                peerAddress: conversation.peerAddress,
+                id: conversationId,
+                peerAddress,
                 messages: messages.map((msg: DecodedMessage) => ({
                   senderAddress: msg.senderAddress,
                   content: msg.content as string,
@@ -627,20 +750,18 @@ export function useXmtp() {
                 })),
                 preview: messages[messages.length - 1]?.content as string || '',
                 lastMessage: messages[messages.length - 1]?.content as string || '',
+                sharedNFTs,
                 unreadCount: 0,
                 lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
               }
 
               setConversations(prev => {
-                // Double check to prevent race conditions
-                if (prev.some(conv => conv.id === uniqueId)) return prev
+                if (prev.some(conv => conv.peerAddress.toLowerCase() === peerAddress)) return prev
                 return [...prev, newConversation]
               })
 
-              // Set up message stream for new conversation
               await setupStreamForConversation(conversation)
             }
-            // Handle group chats if needed...
           }
         } catch (error) {
           console.error('Error in conversation stream:', error)
@@ -670,7 +791,7 @@ export function useXmtp() {
 
     const checkTokenOwnership = async () => {
       const userAddress = await client.address
-      const currentNFTs = await getAllNFTs(userAddress)
+      const currentNFTs = await getCachedNFTs(userAddress)
       setUserNFTs(currentNFTs)
 
       // Update available group chats
@@ -713,6 +834,45 @@ export function useXmtp() {
     }
   }
 
+  const selectConversation = useCallback(async (conversationId: string) => {
+    if (!client) return
+
+    try {
+      const conversation = conversations.find(c => c.id === conversationId)
+      if (!conversation) {
+        throw new Error('Conversation not found')
+      }
+
+      const xmtpConversation = await client.conversations.newConversation(
+        conversation.peerAddress
+      )
+      setCurrentConversation(xmtpConversation)
+      
+      await setupStreamForConversation(xmtpConversation)
+      
+      return conversation
+    } catch (error) {
+      console.error('Error selecting conversation:', error)
+      setError('Failed to select conversation')
+      return null
+    }
+  }, [client, conversations])
+
+  useEffect(() => {
+    const clearCache = () => {
+      nftCacheRef.current = {};
+    };
+
+    // Clear cache when disconnecting
+    if (!isConnected) {
+      clearCache();
+    }
+
+    return () => {
+      clearCache();
+    };
+  }, [isConnected]);
+
   return {
     connect,
     disconnect,
@@ -731,5 +891,7 @@ export function useXmtp() {
     availableGroupChats,
     toggleGroupChat,
     markConversationAsRead,
+    selectConversation,
+    isLoadingConversations,
   } as const
 } 

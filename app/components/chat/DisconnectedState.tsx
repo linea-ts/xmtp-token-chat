@@ -11,8 +11,8 @@ export const DisconnectedState = ({ isLoading, onConnect }: DisconnectedStatePro
       <div className="flex-1 flex flex-col items-center justify-center p-4">
         {isLoading ? (
           <div className="flex flex-col items-center space-y-4 animate-fade-in">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-500"></div>
-            <p className="text-lg text-gray-600">Connecting to chat...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-yellow-500 border-t-transparent"></div>
+            <p className="text-gray-500 text-lg">Connecting to chat...</p>
           </div>
         ) : (
           <div className="animate-fade-in">

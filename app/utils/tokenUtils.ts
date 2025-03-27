@@ -42,10 +42,14 @@ export async function getAllNFTs(walletAddress: string): Promise<TokenInfo[]> {
   }
 }
 
-export function hasMatchingNFTs(userNFTs: TokenInfo[], peerNFTs: TokenInfo[]): boolean {
-  return userNFTs.some(userNFT => 
+export const getSharedNFTs = (userNFTs: TokenInfo[], peerNFTs: TokenInfo[]): TokenInfo[] => {
+  return userNFTs.filter(userNFT => 
     peerNFTs.some(peerNFT => 
       peerNFT.contractAddress.toLowerCase() === userNFT.contractAddress.toLowerCase()
     )
   );
-} 
+};
+
+export const hasMatchingNFTs = (userNFTs: TokenInfo[], peerNFTs: TokenInfo[]): boolean => {
+  return getSharedNFTs(userNFTs, peerNFTs).length > 0;
+}; 
