@@ -307,7 +307,7 @@ export function useXmtp() {
             throw new Error("You don't own any NFTs")
           }
           if (peerNFTs.length === 0) {
-            throw new Error("The recipient doesn't own any NFTs")
+            throw new Error("The recipient doesn't own any NFTs on Linea")
           }
           throw new Error("You don't share any NFTs with this address")
         }
