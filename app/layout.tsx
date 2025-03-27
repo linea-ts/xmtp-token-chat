@@ -8,8 +8,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "XMTP Chat",
-  description: "A decentralized chat application built with Next.js and XMTP protocol",
+  title: "TokenTalk",
+  description: "Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM network",
+  icons: [
+    { rel: "icon", url: "/favicon.svg", type: "image/svg+xml" },
+    { rel: "shortcut icon", url: "/favicon.svg" },
+    { rel: "apple-touch-icon", url: "/favicon.svg" },
+  ],
 };
 
 export default function RootLayout({
@@ -19,6 +24,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         {children}
       </body>

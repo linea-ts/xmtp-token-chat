@@ -33,6 +33,7 @@ function ChatContent() {
   } = useXmtp()
   
   const [recipientAddress, setRecipientAddress] = useState('')
+  const [displayAddress, setDisplayAddress] = useState('')
   const [message, setMessage] = useState('')
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [currentMessages, setCurrentMessages] = useState<Message[]>([])
@@ -88,10 +89,18 @@ function ChatContent() {
     await connect()
   }
 
+  const truncateAddress = (address: string) => {
+    if (address.match(/^0x[a-fA-F0-9]{40}$/)) {
+      return `${address.slice(0, 6)}...${address.slice(-4)}`
+    }
+    return address
+  }
+
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault()
     await startChat(recipientAddress)
     setRecipientAddress('')
+    setDisplayAddress('')
   }
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -140,8 +149,18 @@ function ChatContent() {
                 type="text"
                 placeholder="Enter wallet address"
                 className="w-full p-2 border rounded"
-                value={recipientAddress}
-                onChange={(e) => setRecipientAddress(e.target.value)}
+                value={displayAddress}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setRecipientAddress(newValue);
+                  setDisplayAddress(truncateAddress(newValue));
+                }}
+                onPaste={(e) => {
+                  e.preventDefault();
+                  const pastedText = e.clipboardData.getData('text');
+                  setRecipientAddress(pastedText);
+                  setDisplayAddress(truncateAddress(pastedText));
+                }}
               />
               <button
                 onClick={handleStartChat}
@@ -153,7 +172,7 @@ function ChatContent() {
 
             <div className="flex-1 overflow-hidden flex flex-col min-h-0">
               <h2 className="font-semibold mb-2">Recent Chats</h2>
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto space-y-2">
                 {conversations.map((conversation) => {
                   const conversationKey = getUniqueConversationKey(conversation);
                   const isSelected = selectedConversationId === conversationKey;
@@ -162,7 +181,7 @@ function ChatContent() {
                     <div
                       key={conversationKey}
                       onClick={() => !isSelecting && selectConversation(conversation)}
-                      className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 relative
+                      className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 relative mb-2 min-h-[68px]
                         ${isSelected ? 'bg-yellow-50 border-2 border-yellow-500' : 'border border-gray-200'}
                         ${conversation.unreadCount > 0 ? 'bg-blue-50' : ''}`}
                     >
@@ -181,13 +200,20 @@ function ChatContent() {
                             )}
                           </div>
                           {conversation.preview && (
-                            <div className="text-sm text-gray-500 truncate">
+                            <div className="text-sm text-gray-500 truncate mt-1">
                               {conversation.preview}
                             </div>
                           )}
                           {conversation.lastMessageTimestamp && (
-                            <div className="text-xs text-gray-400">
-                              {new Date(conversation.lastMessageTimestamp).toLocaleString()}
+                            <div className="text-xs text-gray-400 mt-1">
+                              {new Date(conversation.lastMessageTimestamp).toLocaleString('en-US', {
+                                month: 'numeric',
+                                day: 'numeric',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              })}
                             </div>
                           )}
                         </div>

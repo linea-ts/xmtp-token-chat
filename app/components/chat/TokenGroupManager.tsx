@@ -25,21 +25,16 @@ export const TokenGroupManager = ({
           )
           
           return (
-            <div key={token.contractAddress} className="flex items-center justify-between p-2 border rounded">
-              <div>
-                <div className="font-medium">{token.contractName}</div>
-                <div className="text-sm text-gray-500">{token.contractAddress}</div>
+            <div key={token.contractAddress} className="grid grid-cols-1 sm:grid-cols-[1fr,auto] gap-2 p-2 border rounded">
+              <div className="min-w-0 pr-2">
+                <div className="font-medium truncate">{token.contractName}</div>
+                <div className="text-sm text-gray-500 truncate">{token.contractAddress}</div>
               </div>
-              <button
-                onClick={() => onToggleGroup(token.contractAddress)}
-                className={`px-4 py-2 rounded ${
-                  group?.joined 
-                    ? 'bg-red-100 text-red-700 hover:bg-red-200' 
-                    : 'bg-green-100 text-green-700 hover:bg-green-200'
-                }`}
-              >
-                {group?.joined ? 'Leave' : 'Join'}
-              </button>
+              <div className="flex items-center">
+                <span className="text-sm text-yellow-600 bg-yellow-50 px-3 py-1 rounded">
+                  Coming Soon
+                </span>
+              </div>
             </div>
           )
         })}
