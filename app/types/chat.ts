@@ -1,7 +1,6 @@
 import { TokenInfo } from '../utils/tokenUtils';
 
 export interface Message {
-  id?: string;
   senderAddress: string;
   content: string;
   sent: Date;
@@ -10,6 +9,7 @@ export interface Message {
 export interface GroupMetadata {
   name: string;
   members: string[];
+  type?: 'token_group' | 'group';
 }
 
 export interface Conversation {
@@ -20,6 +20,8 @@ export interface Conversation {
   preview?: string;
   lastMessage?: string;
   sharedNFTs?: TokenInfo[];
+  unreadCount: number;
+  lastMessageTimestamp: number;
 }
 
 export interface ChatState {

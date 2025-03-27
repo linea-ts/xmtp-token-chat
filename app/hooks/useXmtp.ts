@@ -1,40 +1,11 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { Client, Conversation as XMTPConversation, DecodedMessage } from '@xmtp/xmtp-js'
+import type { Client, Conversation as XMTPConversation, DecodedMessage, Stream } from '@xmtp/xmtp-js'
 import { ethers } from 'ethers'
 import { switchToLinea, validateLineaNetwork, setupNetworkMonitoring } from '../utils/chainValidation'
 import { TokenInfo, getAllNFTs, hasMatchingNFTs } from '../utils/tokenUtils'
-
-interface Message {
-  senderAddress: string
-  content: string
-  sent: Date
-}
-
-interface Conversation {
-  id: string
-  peerAddress: string
-  messages: Message[]
-  groupMetadata?: {
-    name: string
-    members: string[]
-    type?: 'token_group' | 'group'
-  }
-  preview?: string
-  lastMessage?: string
-  sharedNFTs?: TokenInfo[]
-}
-
-type MessageStream = {
-  [Symbol.asyncIterator](): AsyncIterator<DecodedMessage>
-}
-
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
+import { Message, Conversation } from '../types/chat'
 
 interface ConversationData {
   id: string
@@ -46,6 +17,8 @@ interface ConversationData {
     name: string
     members: string[]
   }
+  unreadCount: number
+  lastMessageTimestamp: number
 }
 
 export function useXmtp() {
@@ -71,10 +44,16 @@ export function useXmtp() {
       members: string[]
     }
   }>({})
-  const streamsRef = useRef<Map<string, MessageStream>>(new Map())
+  const streamsRef = useRef<Map<string, Stream<DecodedMessage>>>(new Map())
+  const conversationStreamRef = useRef<any>(null)
 
   const disconnect = useCallback(async () => {
-    // Clean up all streams
+    // Clean up conversation stream
+    if (conversationStreamRef.current) {
+      conversationStreamRef.current[Symbol.asyncIterator]().return?.()
+    }
+    
+    // Clean up all message streams
     for (const stream of streamsRef.current.values()) {
       stream[Symbol.asyncIterator]().return?.()
     }
@@ -133,6 +112,7 @@ export function useXmtp() {
         setIsConnected(true)
         setError(null)
         await loadConversations(xmtp)
+        await setupConversationStream(xmtp)
       }
 
     } catch (error: any) {
@@ -195,12 +175,24 @@ export function useXmtp() {
     checkPersistedConnection()
   }, [client, connect, wasDisconnected])
 
+  const markConversationAsRead = useCallback((conversationId: string) => {
+    setConversations(prev => 
+      prev.map(conv => 
+        conv.id === conversationId 
+          ? { ...conv, unreadCount: 0 }
+          : conv
+      )
+    )
+  }, [])
+
   const handleNewStreamMessage = useCallback((msg: DecodedMessage, peerAddress: string) => {
     const newMessage = {
       senderAddress: msg.senderAddress,
       content: msg.content as string,
       sent: msg.sent,
     }
+    
+    const isFromMe = msg.senderAddress.toLowerCase() === client?.address?.toLowerCase()
     
     setMessages(prevMessages => {
       const messageExists = prevMessages.some(m => 
@@ -213,7 +205,7 @@ export function useXmtp() {
     })
 
     setConversations(prevConvs => {
-      return prevConvs.map(conv => {
+      const updatedConvs = prevConvs.map(conv => {
         if (conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()) {
           const messageExists = conv.messages.some(m => 
             m.senderAddress === newMessage.senderAddress && 
@@ -221,17 +213,26 @@ export function useXmtp() {
             Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 5000
           )
           if (messageExists) return conv
+
+          const shouldIncrementUnread = !isFromMe && 
+            currentConversation?.peerAddress.toLowerCase() !== peerAddress.toLowerCase()
+
           return {
             ...conv,
             messages: [...conv.messages, newMessage],
             preview: msg.content as string,
-            lastMessage: msg.content as string
+            lastMessage: msg.content as string,
+            lastMessageTimestamp: msg.sent.getTime(),
+            unreadCount: shouldIncrementUnread ? (conv.unreadCount || 0) + 1 : conv.unreadCount || 0
           }
         }
         return conv
       })
+      
+      // Sort conversations by most recent message
+      return updatedConvs.sort((a, b) => (b.lastMessageTimestamp || 0) - (a.lastMessageTimestamp || 0))
     })
-  }, [])
+  }, [client?.address, currentConversation])
 
   const startChat = useCallback(async (peerAddress: string) => {
     if (!client) {
@@ -260,7 +261,9 @@ export function useXmtp() {
         peerAddress,
         messages: [],
         preview: '',
-        lastMessage: ''
+        lastMessage: '',
+        unreadCount: 0,
+        lastMessageTimestamp: Date.now(),
       }
 
       setCurrentConversation(conversation)
@@ -332,7 +335,9 @@ export function useXmtp() {
               ...conv,
               messages: [...conv.messages, newMessage],
               preview: message,
-              lastMessage: message
+              lastMessage: message,
+              lastMessageTimestamp: Date.now(),
+              unreadCount: 0
             }
           }
           return conv
@@ -380,7 +385,9 @@ export function useXmtp() {
           type: 'token_group'
         },
         preview: '',
-        lastMessage: ''
+        lastMessage: '',
+        unreadCount: 0,
+        lastMessageTimestamp: Date.now(),
       }
 
       // Set up stream for the group
@@ -417,7 +424,9 @@ export function useXmtp() {
                 sent: msg.sent,
               })),
               preview: messages[messages.length - 1]?.content as string || '',
-              lastMessage: messages[messages.length - 1]?.content as string || ''
+              lastMessage: messages[messages.length - 1]?.content as string || '',
+              unreadCount: 0,
+              lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
             }
           }
 
@@ -443,7 +452,9 @@ export function useXmtp() {
                 members: JSON.parse(conversation.context?.metadata?.members || '[]')
               },
               preview: messages[messages.length - 1]?.content as string || '',
-              lastMessage: messages[messages.length - 1]?.content as string || ''
+              lastMessage: messages[messages.length - 1]?.content as string || '',
+              unreadCount: 0,
+              lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
             }
           }
           
@@ -579,8 +590,74 @@ export function useXmtp() {
     handleNewMessages()
   }
 
+  const setupConversationStream = async (xmtp: Client) => {
+    try {
+      // Clean up existing stream if it exists
+      if (conversationStreamRef.current) {
+        conversationStreamRef.current[Symbol.asyncIterator]().return?.()
+      }
+
+      // Start streaming new conversations
+      conversationStreamRef.current = await xmtp.conversations.stream()
+      
+      const handleNewConversations = async () => {
+        try {
+          for await (const conversation of conversationStreamRef.current) {
+            console.log('New conversation detected:', conversation)
+            
+            const isGroup = conversation.context?.conversationId?.startsWith('group:')
+            const uniqueId = isGroup 
+              ? conversation.context?.conversationId 
+              : `direct:${conversation.peerAddress.toLowerCase()}:${conversation.topic}`
+
+            // Check if conversation already exists
+            const exists = conversations.some(conv => conv.id === uniqueId)
+            if (exists) continue
+
+            // For 1-on-1 chats
+            if (!isGroup) {
+              const messages = await conversation.messages()
+              const newConversation: ConversationData = {
+                id: uniqueId,
+                peerAddress: conversation.peerAddress,
+                messages: messages.map((msg: DecodedMessage) => ({
+                  senderAddress: msg.senderAddress,
+                  content: msg.content as string,
+                  sent: msg.sent,
+                })),
+                preview: messages[messages.length - 1]?.content as string || '',
+                lastMessage: messages[messages.length - 1]?.content as string || '',
+                unreadCount: 0,
+                lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
+              }
+
+              setConversations(prev => {
+                // Double check to prevent race conditions
+                if (prev.some(conv => conv.id === uniqueId)) return prev
+                return [...prev, newConversation]
+              })
+
+              // Set up message stream for new conversation
+              await setupStreamForConversation(conversation)
+            }
+            // Handle group chats if needed...
+          }
+        } catch (error) {
+          console.error('Error in conversation stream:', error)
+        }
+      }
+
+      handleNewConversations()
+    } catch (error) {
+      console.error('Error setting up conversation stream:', error)
+    }
+  }
+
   useEffect(() => {
     return () => {
+      if (conversationStreamRef.current) {
+        conversationStreamRef.current[Symbol.asyncIterator]().return?.()
+      }
       for (const stream of streamsRef.current.values()) {
         stream[Symbol.asyncIterator]().return?.()
       }
@@ -653,5 +730,6 @@ export function useXmtp() {
     userNFTs,
     availableGroupChats,
     toggleGroupChat,
+    markConversationAsRead,
   } as const
 } 
