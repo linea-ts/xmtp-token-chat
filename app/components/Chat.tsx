@@ -96,8 +96,13 @@ function ChatContent() {
     return address
   }
 
+  const isValidEthAddress = (address: string) => {
+    return /^0x[a-fA-F0-9]{40}$/.test(address);
+  };
+
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!recipientAddress || !isValidEthAddress(recipientAddress)) return;
     await startChat(recipientAddress)
     setRecipientAddress('')
     setDisplayAddress('')
@@ -164,7 +169,12 @@ function ChatContent() {
               />
               <button
                 onClick={handleStartChat}
-                className="mt-2 w-full btn-primary"
+                className={`mt-2 w-full ${
+                  !recipientAddress || !isValidEthAddress(recipientAddress)
+                    ? 'bg-yellow-100 text-yellow-500 opacity-60 cursor-not-allowed'
+                    : 'btn-primary'
+                }`}
+                disabled={!recipientAddress || !isValidEthAddress(recipientAddress)}
               >
                 Start Chat
               </button>

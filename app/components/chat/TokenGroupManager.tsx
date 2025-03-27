@@ -1,4 +1,4 @@
-import { TokenInfo } from '../../utils/tokenUtils'
+import { TokenInfo } from '@/app/utils/tokenUtils'
 
 interface TokenGroupManagerProps {
   userNFTs: TokenInfo[]
@@ -16,9 +16,9 @@ export const TokenGroupManager = ({
   onToggleGroup 
 }: TokenGroupManagerProps) => {
   return (
-    <div className="border rounded p-4 mb-4">
+    <div className="flex-1 overflow-hidden flex flex-col min-h-0">
       <h2 className="font-semibold mb-2">Token Group Chats</h2>
-      <div className="space-y-2">
+      <div className="flex-1 overflow-y-auto space-y-2">
         {userNFTs.map(token => {
           const group = availableGroupChats.find(g => 
             g.contractAddress.toLowerCase() === token.contractAddress.toLowerCase()
