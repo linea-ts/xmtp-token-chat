@@ -149,7 +149,7 @@ function ChatContent() {
               onToggleGroup={toggleGroupChat}
             />
 
-            <div className="mb-4">
+            <div className="mt-4 mb-4 pt-4 border-t border-gray-200">
               <input
                 type="text"
                 placeholder="Enter wallet address"
@@ -180,7 +180,7 @@ function ChatContent() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className="flex-1 overflow-hidden flex flex-col min-h-0 pt-4 border-t border-gray-200">
               <h2 className="font-semibold mb-2">Recent Chats</h2>
               <div className="flex-1 overflow-y-auto space-y-2">
                 {conversations.map((conversation) => {

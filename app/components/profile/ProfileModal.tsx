@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CopyableAddress } from '../common/CopyableAddress';
 
 interface ProfileModalProps {
@@ -10,14 +10,36 @@ interface ProfileModalProps {
 export const ProfileModal = ({ address, isOpen, onClose }: ProfileModalProps) => {
   // Temporary hardcoded data - will be replaced with real data later
   const [username] = useState('LineaFox');
-  const [bio] = useState('Digital artist and crypto enthusiast. Always on the lookout for the next big thing in the NFT world.');
+  const [bio, setBio] = useState('Digital artist and crypto enthusiast. Always on the lookout for the next big thing in the NFT world.');
+  const [isEditingBio, setIsEditingBio] = useState(false);
   
   const dummyNFTs = [
-    '/bgtransparent.png',
-    '/bgtransparent.png',
-    '/bgtransparent.png',
-    '/bgtransparent.png',
+    '/nft1.webp',
+    '/nft2.gif',
+    '/nft3.png',
+    '/nft4.jpg',
   ];
+
+  // Load bio from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedBio = localStorage.getItem(`bio_${address}`);
+      if (savedBio) {
+        setBio(savedBio);
+      }
+    } catch (error) {
+      console.warn('Failed to load bio from localStorage:', error);
+    }
+  }, [address]);
+
+  const handleSaveBio = () => {
+    try {
+      localStorage.setItem(`bio_${address}`, bio);
+    } catch (error) {
+      console.warn('Failed to save bio to localStorage:', error);
+    }
+    setIsEditingBio(false);
+  };
 
   if (!isOpen) return null;
 
@@ -39,7 +61,7 @@ export const ProfileModal = ({ address, isOpen, onClose }: ProfileModalProps) =>
           <div className="text-center">
             <div className="w-32 h-32 rounded-full mx-auto mb-4 overflow-hidden">
               <img
-                src="/bgtransparent.png"
+                src="/nftP.jpg"
                 alt="Profile"
                 className="w-full h-full object-cover"
               />
@@ -91,15 +113,53 @@ export const ProfileModal = ({ address, isOpen, onClose }: ProfileModalProps) =>
           {/* Bio Section */}
           <div>
             <h3 className="text-xl font-semibold mb-4">Bio and Status</h3>
-            <p className="text-gray-600">{bio}</p>
+            {isEditingBio ? (
+              <div className="space-y-2">
+                <textarea
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-yellow-200 focus:border-yellow-500 min-h-[100px]"
+                  placeholder="Write something about yourself..."
+                />
+                <div className="flex justify-end space-x-2">
+                  <button 
+                    onClick={() => setIsEditingBio(false)}
+                    className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleSaveBio}
+                    className="px-4 py-2 bg-yellow-200 hover:bg-yellow-300 text-yellow-800 rounded-lg transition-colors"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="group relative">
+                <p className="text-gray-600">{bio}</p>
+                <button 
+                  onClick={() => setIsEditingBio(true)}
+                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-gray-600 transition-opacity"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Edit Profile Button */}
-          <button 
-            className="w-full bg-yellow-200 hover:bg-yellow-300 text-yellow-800 font-semibold py-3 px-6 rounded-full transition-colors"
-          >
-            Edit Profile
-          </button>
+          {/* Edit Profile Button - Only show when not editing bio */}
+          {!isEditingBio && (
+            <button 
+              onClick={() => setIsEditingBio(true)}
+              className="w-full bg-yellow-200 hover:bg-yellow-300 text-yellow-800 font-semibold py-3 px-6 rounded-full transition-colors"
+            >
+              Edit Profile
+            </button>
+          )}
         </div>
       </div>
     </div>
