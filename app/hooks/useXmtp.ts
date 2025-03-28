@@ -251,6 +251,12 @@ export function useXmtp() {
             removeFromDeletedChats(peerAddress);
         }
 
+        // Set up stream for this conversation if it doesn't exist
+        if (!streamsRef.current.has(peerAddress)) {
+            const conversation = await client.conversations.newConversation(peerAddress);
+            await setupStreamForConversation(conversation);
+        }
+
         const newMessage = {
             senderAddress: msg.senderAddress,
             content: msg.content as string,
@@ -264,10 +270,10 @@ export function useXmtp() {
                 m.senderAddress === newMessage.senderAddress && 
                 m.content === newMessage.content &&
                 Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 5000
-            );
-            if (messageExists) return prevMessages;
-            return [...prevMessages, newMessage];
-        });
+            )
+            if (messageExists) return prevMessages
+            return [...prevMessages, newMessage]
+        })
 
         setConversations(prevConvs => {
             const existingConvIndex = prevConvs.findIndex(
@@ -731,11 +737,11 @@ export function useXmtp() {
   }, [client])
 
   const setupStreamForConversation = useCallback(async (conversation: XMTPConversation) => {
-    const streamKey = conversation.topic;
+    const streamKey = conversation.peerAddress.toLowerCase();
     
+    // Don't set up duplicate streams
     if (streamsRef.current.has(streamKey)) {
-        streamsRef.current.get(streamKey)?.[Symbol.asyncIterator]().return?.();
-        streamsRef.current.delete(streamKey);
+        return;
     }
 
     try {
@@ -743,103 +749,47 @@ export function useXmtp() {
         streamsRef.current.set(streamKey, stream);
 
         const processStream = async () => {
-            for await (const msg of stream) {
-                const isGroup = conversation.context?.conversationId?.startsWith('group:');
-                const groupName = isGroup ? conversation.context?.metadata?.name : undefined;
-                
-                // If the conversation was deleted, restore it
-                if (isConversationDeleted(conversation.peerAddress, groupName)) {
-                    removeFromDeletedChats(conversation.peerAddress, groupName);
+            try {
+                for await (const msg of stream) {
+                    await handleNewStreamMessage(msg, conversation.peerAddress);
                 }
-
-                const newMessage: Message = {
-                    content: msg.content as string,
-                    senderAddress: msg.senderAddress,
-                    sent: msg.sent
-                };
-
-                setConversations(prevConvs => {
-                    const existingConv = prevConvs.find(
-                        conv => conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase()
-                    );
-
-                    if (existingConv) {
-                        // Update existing conversation
-                        return prevConvs.map(conv => {
-                            if (conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase()) {
-                                const messageExists = conv.messages.some(m => 
-                                    m.senderAddress === newMessage.senderAddress && 
-                                    m.content === newMessage.content &&
-                                    Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 1000
-                                );
-                                
-                                if (messageExists) return conv;
-
-                                const isFromMe = msg.senderAddress.toLowerCase() === client?.address?.toLowerCase();
-                                const isActiveConversation = currentConversation?.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase();
-                                const shouldIncrementUnread = !isFromMe && !isActiveConversation;
-
-                                return {
-                                    ...conv,
-                                    messages: [...conv.messages, newMessage],
-                                    preview: msg.content as string,
-                                    lastMessage: msg.content as string,
-                                    lastMessageTimestamp: Date.now(),
-                                    unreadCount: shouldIncrementUnread ? conv.unreadCount + 1 : conv.unreadCount
-                                };
-                            }
-                            return conv;
-                        });
-                    } else {
-                        // Create new conversation
-                        const newConv: Conversation = {
-                            id: getConversationId(conversation.peerAddress, conversation.topic),
-                            peerAddress: conversation.peerAddress.toLowerCase(),
-                            messages: [newMessage],
-                            preview: msg.content as string,
-                            lastMessage: msg.content as string,
-                            lastMessageTimestamp: Date.now(),
-                            unreadCount: 1,
-                            sharedNFTs: [] // You might want to fetch this
-                        };
-                        return [...prevConvs, newConv];
-                    }
-                });
+            } catch (error) {
+                console.error('Error in message stream:', error);
+                // Remove failed stream so it can be recreated
+                streamsRef.current.delete(streamKey);
             }
         };
 
-        processStream().catch(error => {
-            console.error('Error processing message stream:', error);
-            streamsRef.current.delete(streamKey);
-        });
+        processStream();
     } catch (error) {
         console.error('Error setting up message stream:', error);
         streamsRef.current.delete(streamKey);
     }
-}, [client?.address, currentConversation]);
+}, [handleNewStreamMessage]);
 
   const setupConversationStream = async (xmtp: Client) => {
     try {
-      const stream = await xmtp.conversations.stream();
-      conversationStreamRef.current = stream;
+        const stream = await xmtp.conversations.stream();
+        conversationStreamRef.current = stream;
 
-      const handleNewConversations = async () => {
-        try {
-          for await (const conversation of stream) {
-            if (!streamsRef.current.has(conversation.peerAddress)) {
-              await setupStreamForConversation(conversation);
+        const handleNewConversations = async () => {
+            try {
+                for await (const conversation of stream) {
+                    const streamKey = conversation.peerAddress.toLowerCase();
+                    if (!streamsRef.current.has(streamKey)) {
+                        await setupStreamForConversation(conversation);
+                    }
+                }
+            } catch (error) {
+                console.error('Error in conversation stream:', error);
             }
-          }
-        } catch (error) {
-          console.error('Error in conversation stream:', error);
-        }
-      };
+        };
 
-      handleNewConversations();
+        handleNewConversations();
     } catch (error) {
-      console.error('Error setting up conversation stream:', error);
+        console.error('Error setting up conversation stream:', error);
     }
-  };
+};
 
   useEffect(() => {
     return () => {
