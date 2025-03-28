@@ -251,11 +251,7 @@ export function useXmtp() {
             removeFromDeletedChats(peerAddress);
         }
 
-        // Set up stream for this conversation if it doesn't exist
-        if (!streamsRef.current.has(peerAddress)) {
-            const conversation = await client.conversations.newConversation(peerAddress);
-            await setupStreamForConversation(conversation);
-        }
+        // No need to create a new conversation here - the message already comes from a valid conversation
 
         const newMessage = {
             senderAddress: msg.senderAddress,
@@ -737,9 +733,8 @@ export function useXmtp() {
   }, [client])
 
   const setupStreamForConversation = useCallback(async (conversation: XMTPConversation) => {
-    const streamKey = conversation.peerAddress.toLowerCase();
+    const streamKey = conversation.topic;
     
-    // Don't set up duplicate streams
     if (streamsRef.current.has(streamKey)) {
         return;
     }
@@ -755,7 +750,6 @@ export function useXmtp() {
                 }
             } catch (error) {
                 console.error('Error in message stream:', error);
-                // Remove failed stream so it can be recreated
                 streamsRef.current.delete(streamKey);
             }
         };
@@ -775,8 +769,8 @@ export function useXmtp() {
         const handleNewConversations = async () => {
             try {
                 for await (const conversation of stream) {
-                    const streamKey = conversation.peerAddress.toLowerCase();
-                    if (!streamsRef.current.has(streamKey)) {
+                    // Check if we already have a stream for this conversation topic
+                    if (!streamsRef.current.has(conversation.topic)) {
                         await setupStreamForConversation(conversation);
                     }
                 }
