@@ -327,7 +327,7 @@ export function useXmtp() {
       
       // Don't allow starting chat with deleted conversation unless explicitly restored
       if (isConversationDeleted(peerAddress)) {
-        removeFromDeletedChats(peerAddress)
+        removeFromDeletedChats(peerAddress); // Explicitly restore the conversation
       }
 
       const userAddress = await client.address
@@ -337,11 +337,11 @@ export function useXmtp() {
       }
 
       // Enhanced NFT validation with more specific errors
-      let sharedNFTs: TokenInfo[] = []
+      let sharedNFTs: TokenInfo[] = [] // Define sharedNFTs here
       try {
         const userNFTs = await getCachedNFTs(userAddress)
         const peerNFTs = await getCachedNFTs(peerAddress)
-        sharedNFTs = getSharedNFTs(userNFTs, peerNFTs)
+        sharedNFTs = getSharedNFTs(userNFTs, peerNFTs) // Assign the result to sharedNFTs
 
         if (sharedNFTs.length === 0) {
           if (userNFTs.length === 0) {
@@ -400,15 +400,8 @@ export function useXmtp() {
           : conv
       ))
       
-      // Set up stream for new conversation and ensure it's in streamsRef
+      // Set up stream for new conversation
       await setupStreamForConversation(conversation)
-      
-      // Important: Add this conversation to streamsRef to ensure we receive messages
-      if (!streamsRef.current.has(conversation.topic)) {
-        const stream = await conversation.streamMessages()
-        streamsRef.current.set(conversation.topic, stream)
-      }
-
       return formattedMessages
 
     } catch (error: any) {
