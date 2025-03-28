@@ -22,7 +22,7 @@
   --foreground: #171717;
   --header-bg: #ffffff;
   --header-border: #e5e7eb;
-  --connect-bar-bg: rgb(250 253 253 / 74%);
+  --connect-bar-bg: rgb(97, 223, 255, 0.67);
   --button-bg: #fff068;
   --button-hover: rgb(250 217 64);
 }

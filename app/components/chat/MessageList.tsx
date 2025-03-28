@@ -23,12 +23,9 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // Scroll to bottom when messages change or when switching chats
   useEffect(() => {
     scrollToBottom();
   }, [messages, isSwitchingChat]);
-
-  console.log('MessageList render - isSwitchingChat:', isSwitchingChat);
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -59,7 +56,7 @@ export const MessageList = ({ messages, getMessageId, isSwitchingChat }: Message
                 >
                   <div
                     className={`p-3 rounded-2xl shadow-sm max-w-[80%] break-words
-                      ${isMyMessage ? 'bg-blue-100' : 'bg-white'}`}
+                      ${isMyMessage ? 'bg-[rgb(97,223,255,0.27)]' : 'bg-white'}`}
                   >
                     <div className="text-xs text-gray-500 mb-1">
                       <CopyableAddress address={msg.senderAddress} />

@@ -9,6 +9,7 @@ interface SharedNFTsPreviewProps {
 export const SharedNFTsPreview = ({ nfts }: SharedNFTsPreviewProps) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
 
   const uniqueContracts = Array.from(new Set(nfts.map(nft => ({
@@ -62,21 +63,38 @@ export const SharedNFTsPreview = ({ nfts }: SharedNFTsPreviewProps) => {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const isOutsideContainer = containerRef.current && !containerRef.current.contains(target);
+      const isOutsideTooltip = tooltipRef.current && !tooltipRef.current.contains(target);
+      
+      if (isOutsideContainer && isOutsideTooltip) {
         setShowTooltip(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    if (showTooltip) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showTooltip]);
 
   if (!nfts?.length) return null;
 
   return (
     <div className="relative" ref={containerRef}>
       <div className="text-xs text-gray-400 flex items-center gap-1">
-        <span>{uniqueContracts[0].name}</span>
+        <a 
+          href={`https://lineascan.build/address/${uniqueContracts[0].address}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="hover:text-blue-500 transition-colors"
+        >
+          {uniqueContracts[0].name}
+        </a>
         {uniqueContracts.length > 1 && (
           <button
             onClick={(e) => {
@@ -92,6 +110,7 @@ export const SharedNFTsPreview = ({ nfts }: SharedNFTsPreviewProps) => {
 
       {showTooltip && createPortal(
         <div
+          ref={tooltipRef}
           style={{
             position: 'absolute',
             top: `${tooltipPosition.top}px`,
@@ -111,9 +130,16 @@ export const SharedNFTsPreview = ({ nfts }: SharedNFTsPreviewProps) => {
           </div>
           <div className="space-y-2">
             {uniqueContracts.map(contract => (
-              <div key={contract.address} className="text-xs">
+              <a
+                key={contract.address}
+                href={`https://lineascan.build/address/${contract.address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="block text-xs hover:text-blue-500 transition-colors"
+              >
                 {contract.name}
-              </div>
+              </a>
             ))}
           </div>
         </div>,

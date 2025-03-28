@@ -27,7 +27,7 @@ export const CopyableAddress = ({ address, truncate = true, className = '' }: Co
       </span>
       <button
         onClick={handleCopy}
-        className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+        className="p-1 rounded-full hover:bg-transparent transition-colors"
         title="Copy address"
       >
         {copied ? (

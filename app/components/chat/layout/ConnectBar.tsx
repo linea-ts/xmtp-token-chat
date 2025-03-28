@@ -12,17 +12,17 @@ export const ConnectBar = ({ address, onDisconnect }: ConnectBarProps) => {
 
   return (
     <>
-      <div className="connect-bar-bg border-b px-4 py-2 flex items-center justify-between">
+      <div className="connect-bar-bg border-b px-7 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <div
-            onClick={() => setIsProfileOpen(true)}
-            className="group px-3 py-1.5 hover:bg-yellow-50 rounded-lg transition-colors duration-150 ease-in-out cursor-pointer"
-          >
-            <div className="flex items-center space-x-1">
-              <CopyableAddress address={address} className="text-sm group-hover:text-yellow-700" />
+          <div className="flex items-center space-x-0">
+            <CopyableAddress address={address} className="text-sm" />
+            <div
+              onClick={() => setIsProfileOpen(true)}
+              className="p-1.5 hover:bg-transparent rounded-full transition-colors duration-150 ease-in-out cursor-pointer"
+            >
               <svg 
                 xmlns="http://www.w3.org/2000/svg" 
-                className="h-4 w-4 text-gray-400 group-hover:text-yellow-500" 
+                className="h-4 w-4 text-gray-400 hover:text-gray-600" 
                 fill="none" 
                 viewBox="0 0 24 24" 
                 stroke="currentColor"
@@ -34,9 +34,23 @@ export const ConnectBar = ({ address, onDisconnect }: ConnectBarProps) => {
         </div>
         <button
           onClick={onDisconnect}
-          className="text-sm text-gray-600 hover:text-gray-800"
+          className="p-1.5 hover:bg-transparent rounded-full transition-colors duration-150 ease-in-out cursor-pointer"
+          title="Disconnect"
         >
-          Disconnect
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 text-gray-400 hover:text-gray-600"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            />
+          </svg>
         </button>
       </div>
 

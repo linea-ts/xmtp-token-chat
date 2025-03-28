@@ -32,6 +32,25 @@ export const ProfileModal = ({ address, isOpen, onClose }: ProfileModalProps) =>
     }
   }, [address]);
 
+  // Add ESC key handler with debugging
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      window.addEventListener('keydown', handleEsc, true);
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleEsc, true);
+    };
+  }, [isOpen, onClose]);
+
   const handleSaveBio = () => {
     try {
       localStorage.setItem(`bio_${address}`, bio);
@@ -44,7 +63,16 @@ export const ProfileModal = ({ address, isOpen, onClose }: ProfileModalProps) =>
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div 
+      id="modal-container"
+      tabIndex={-1} // Make the container focusable
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <div className="bg-white rounded-2xl max-w-2xl w-full mx-auto relative overflow-y-auto max-h-[90vh]">
         {/* Close button */}
         <button

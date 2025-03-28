@@ -103,27 +103,42 @@ function ChatContent() {
     return /^0x[a-fA-F0-9]{40}$/.test(address);
   };
 
-  const handleStartChat = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!recipientAddress) return;
-    
-    try {
-      const result = await startChat(recipientAddress)
-      if (result) {
-        setRecipientAddress('')
-        setDisplayAddress('')
-        setStartChatError(null)
-      }
-    } catch (error: any) {
-      setStartChatError(error.message || 'Failed to start chat')
+  const handleStartChat = async () => {
+    if (!isValidEthAddress(recipientAddress)) {
+      setStartChatError('Please enter a valid wallet address');
+      
+      // Clear error after 3 seconds
       if (startChatTimeoutRef.current) {
-        clearTimeout(startChatTimeoutRef.current)
+        clearTimeout(startChatTimeoutRef.current);
       }
       startChatTimeoutRef.current = setTimeout(() => {
-        setStartChatError(null)
-      }, 3000)
+        setStartChatError(null);
+      }, 3000);
+      
+      return;
     }
-  }
+
+    try {
+      setStartChatError(null);
+      await startChat(recipientAddress);
+      setRecipientAddress('');
+      setDisplayAddress('');
+    } catch (error: any) {
+      // Check for the specific error message
+      if (error.message === "Cannot start conversation with yourself") {
+        setStartChatError('You cannot send messages to yourself.');
+      } else {
+        setStartChatError('Unable to start chat. Please try again.');
+      }
+      
+      if (startChatTimeoutRef.current) {
+        clearTimeout(startChatTimeoutRef.current);
+      }
+      startChatTimeoutRef.current = setTimeout(() => {
+        setStartChatError(null);
+      }, 3000);
+    }
+  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -151,6 +166,18 @@ function ChatContent() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setSelectedConversationId(null);
+        setCurrentMessages([]);
+      }
+    };
+
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
 
   if (!isConnected) {
     return <DisconnectedState isLoading={isLoading} onConnect={handleConnect} />;
@@ -185,6 +212,12 @@ function ChatContent() {
                   setRecipientAddress(newValue);
                   setDisplayAddress(truncateAddress(newValue));
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleStartChat();
+                  }
+                }}
                 onPaste={(e) => {
                   e.preventDefault();
                   const pastedText = e.clipboardData.getData('text');
@@ -206,7 +239,7 @@ function ChatContent() {
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col min-h-0 pt-4 border-t border-gray-200">
-              <h2 className="font-semibold mb-2">Recent Chats</h2>
+              <h2 className="font-semibold mb-2">Direct Messages</h2>
               {isLoadingConversations ? (
                 <div className="flex flex-col items-center justify-center space-y-4">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-yellow-500 border-t-transparent"></div>
