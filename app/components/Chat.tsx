@@ -253,7 +253,7 @@ function ChatContent() {
             <div className="flex-1 overflow-hidden">
               {activeTab === 'direct' ? (
                 <div className="h-full flex flex-col">
-                  <div className="mb-4 relative">
+                  <div className="mb-4 relative flex-shrink-0">
                     <input
                       type="text"
                       placeholder="Enter wallet address"
@@ -290,14 +290,14 @@ function ChatContent() {
                     </button>
                   </div>
 
-                  <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+                  <div className="flex-1 overflow-hidden">
                     {isLoadingConversations ? (
                       <div className="flex flex-col items-center justify-center space-y-4">
                         <div className="animate-spin rounded-full h-12 w-12 border-4 border-yellow-500 border-t-transparent"></div>
                         <p className="text-gray-500 text-lg">Loading conversations...</p>
                       </div>
                     ) : (
-                      <div className="flex-1 overflow-y-auto space-y-2">
+                      <div className="h-full overflow-y-auto">
                         {conversations.map((conversation) => {
                           const conversationKey = getUniqueConversationKey(conversation);
                           const isSelected = selectedConversationId === conversationKey;
@@ -376,11 +376,13 @@ function ChatContent() {
                   </div>
                 </div>
               ) : (
-                <TokenGroupManager
-                  userNFTs={userNFTs}
-                  availableGroupChats={availableGroupChats}
-                  onToggleGroup={toggleGroupChat}
-                />
+                <div className="h-full overflow-y-auto">
+                  <TokenGroupManager
+                    userNFTs={userNFTs}
+                    availableGroupChats={availableGroupChats}
+                    onToggleGroup={toggleGroupChat}
+                  />
+                </div>
               )}
             </div>
           </div>
