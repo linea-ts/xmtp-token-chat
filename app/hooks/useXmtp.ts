@@ -270,8 +270,10 @@ export function useXmtp() {
         });
 
         setConversations(prevConvs => {
-            const existingConvIndex = prevConvs.findIndex(
-                conv => conv.peerAddress.toLowerCase() === peerAddress.toLowerCase()
+            // Look for existing conversation in both directions
+            const existingConvIndex = prevConvs.findIndex(conv => 
+                conv.peerAddress.toLowerCase() === peerAddress.toLowerCase() ||
+                conv.peerAddress.toLowerCase() === msg.senderAddress.toLowerCase()
             );
 
             if (existingConvIndex !== -1) {
@@ -759,14 +761,17 @@ export function useXmtp() {
                 };
 
                 setConversations(prevConvs => {
-                    const existingConv = prevConvs.find(
-                        conv => conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase()
+                    // Look for existing conversation in both directions
+                    const existingConv = prevConvs.find(conv => 
+                        conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase() ||
+                        conv.peerAddress.toLowerCase() === msg.senderAddress.toLowerCase()
                     );
 
                     if (existingConv) {
                         // Update existing conversation
                         return prevConvs.map(conv => {
-                            if (conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase()) {
+                            if (conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase() ||
+                                conv.peerAddress.toLowerCase() === msg.senderAddress.toLowerCase()) {
                                 const messageExists = conv.messages.some(m => 
                                     m.senderAddress === newMessage.senderAddress && 
                                     m.content === newMessage.content &&
