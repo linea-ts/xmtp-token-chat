@@ -33,7 +33,7 @@ export const DisconnectedState = ({ isLoading, onConnect }: DisconnectedStatePro
                         </g>
                       </svg>
                     </span>
-                    <h3 className="section_title__llN6N text-4xl font-bold ml-1">TokenTalk</h3>
+                    <h3 className="section_title__llN6N text-4xl font-semibold ml-1">TokenTalk</h3>
                   </div>
                 </div>
                 <p className="text-xl text-gray-600">Connect with fellow memecoin/NFT holders on Linea! the fastest and cheapest zkEVM network.</p>
@@ -43,7 +43,7 @@ export const DisconnectedState = ({ isLoading, onConnect }: DisconnectedStatePro
                   onClick={onConnect}
                   className="btn-primary text-lg px-8 py-3 rounded-[40px]"
                 >
-                  Login with Your Wallet
+                  Connect
                 </button>
               </div>
             </div>

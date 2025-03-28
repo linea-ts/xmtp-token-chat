@@ -453,7 +453,7 @@ export function useXmtp() {
           conversationId: groupId,
           metadata: {
             name: tokenInfo?.contractName || `Token Holders: ${contractAddress}`,
-            description: `Group chat for holders of tokens from contract ${contractAddress}`,
+            description: `Group chat for owners of tokens from contract ${contractAddress}`,
             members: JSON.stringify([]),
             type: 'token_group'
           }

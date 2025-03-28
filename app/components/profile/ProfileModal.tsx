@@ -94,7 +94,7 @@ export const ProfileModal = ({ address, isOpen, onClose }: ProfileModalProps) =>
                 className="w-full h-full object-cover"
               />
             </div>
-            <h2 className="text-2xl font-bold mb-1">{username}</h2>
+            <h2 className="text-2xl font-semibold mb-1">{username}</h2>
             <div className="inline-block">
               <CopyableAddress address={address} truncate={true} className="text-gray-500" />
             </div>
