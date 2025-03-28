@@ -156,13 +156,17 @@ export function useXmtp() {
     const checkPersistedConnection = async () => {
       const wasExplicitlyDisconnected = localStorage.getItem('xmtp-disconnected') === 'true'
       
+      // Add check for new window/tab
+      const isNewSession = !localStorage.getItem('xmtp-session')
+      
       if (
         typeof window === 'undefined' || 
         !window.ethereum || 
         client || 
         initializingRef.current ||
         wasExplicitlyDisconnected ||
-        wasDisconnected
+        wasDisconnected ||
+        isNewSession  // Add this condition
       ) return
       
       // Only attempt auto-connect if we already have a connected account
@@ -173,6 +177,8 @@ export function useXmtp() {
         const provider = new ethers.providers.Web3Provider(window.ethereum)
         await validateLineaNetwork(provider)
         if (!initializingRef.current) {
+          // Set session flag before connecting
+          localStorage.setItem('xmtp-session', 'true')
           await connect()
         }
       } catch (error) {
@@ -182,6 +188,13 @@ export function useXmtp() {
 
     checkPersistedConnection()
   }, [client, connect, wasDisconnected])
+
+  // Add cleanup for session flag when component unmounts
+  useEffect(() => {
+    return () => {
+      localStorage.removeItem('xmtp-session')
+    }
+  }, [])
 
   const markConversationAsRead = useCallback((conversationId: string) => {
     setConversations(prev => 
@@ -735,13 +748,18 @@ export function useXmtp() {
                   removeFromDeletedChats(conv.peerAddress);
                 }
 
+                // Only increment unread count if message is from someone else
+                const isFromMe = msg.senderAddress.toLowerCase() === client.address?.toLowerCase();
+                const shouldIncrementUnread = !isFromMe && 
+                  currentConversation?.peerAddress.toLowerCase() !== conversation.peerAddress.toLowerCase();
+
                 return {
                   ...conv,
                   messages: [...conv.messages, newMessage],
                   preview: msg.content as string,
                   lastMessage: msg.content as string,
                   lastMessageTimestamp: Date.now(),
-                  unreadCount: conv.unreadCount + 1
+                  unreadCount: shouldIncrementUnread ? conv.unreadCount + 1 : conv.unreadCount
                 };
               }
               return conv;
@@ -754,7 +772,7 @@ export function useXmtp() {
     } catch (error) {
       console.error('Error setting up message stream:', error);
     }
-  }, [client]);
+  }, [client, currentConversation]);
 
   const setupConversationStream = async (xmtp: Client) => {
     try {
