@@ -51,7 +51,6 @@ export const TokenGroupManager = ({
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-      <h2 className="font-semibold mb-2">Group Chats</h2>
       <div className="flex-1 overflow-y-auto space-y-2">
         {userNFTs.map(token => {
           const group = availableGroupChats.find(g => 

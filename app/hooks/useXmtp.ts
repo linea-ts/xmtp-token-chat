@@ -6,6 +6,7 @@ import { ethers } from 'ethers'
 import { switchToLinea, validateLineaNetwork, setupNetworkMonitoring } from '../utils/chainValidation'
 import { TokenInfo, getAllNFTs, hasMatchingNFTs, getSharedNFTs } from '../utils/tokenUtils'
 import { Message, Conversation } from '../types/chat'
+import { addDeletedChat, isConversationDeleted, removeFromDeletedChats } from '../utils/deletedChats'
 
 interface ConversationData {
   id: string
@@ -84,19 +85,18 @@ export function useXmtp() {
   }, [])
 
   const connect = useCallback(async () => {
-    if (initializingRef.current || client) {
-      return
-    }
-
-    if (!window.ethereum) {
-      setError('Please install MetaMask to use this app')
-      return
-    }
+    if (initializingRef.current) return;
+    initializingRef.current = true;
 
     try {
-      initializingRef.current = true
-      setIsLoading(true)
-      
+      setIsLoading(true);
+      setError(null);
+
+      if (!window.ethereum) {
+        setError('Please install MetaMask to use this app')
+        return
+      }
+
       localStorage.removeItem('xmtp-disconnected')
       setWasDisconnected(false)
 
@@ -215,6 +215,10 @@ export function useXmtp() {
   };
 
   const handleNewStreamMessage = useCallback(async (msg: DecodedMessage, peerAddress: string) => {
+    if (isConversationDeleted(peerAddress)) {
+      return; // Skip processing messages for deleted conversations
+    }
+
     if (!client) return
 
     try {
@@ -289,6 +293,12 @@ export function useXmtp() {
     
     try {
       const peerAddress = ethers.utils.getAddress(addressInput).toLowerCase()
+      
+      // Don't allow starting chat with deleted conversation unless explicitly restored
+      if (isConversationDeleted(peerAddress)) {
+        removeFromDeletedChats(peerAddress); // Explicitly restore the conversation
+      }
+
       const userAddress = await client.address
       
       if (peerAddress === userAddress.toLowerCase()) {
@@ -503,6 +513,12 @@ export function useXmtp() {
           batch.map(async (conversation): Promise<ConversationData | null> => {
             const isGroup = conversation.context?.conversationId?.startsWith('group:')
             const peerAddress = conversation.peerAddress.toLowerCase()
+            const groupName = isGroup ? conversation.context?.metadata?.name : undefined
+            
+            // Skip if conversation is deleted
+            if (isConversationDeleted(peerAddress, groupName)) {
+              return null;
+            }
             
             if (!isGroup) {
               if (peerAddress === userAddress.toLowerCase()) return null;
@@ -510,7 +526,6 @@ export function useXmtp() {
               const peerNFTs = await getCachedNFTs(peerAddress)
               const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs)
               
-              // Skip if no shared NFTs
               if (sharedNFTs.length === 0) return null;
 
               const messages = await conversation.messages()
@@ -679,73 +694,96 @@ export function useXmtp() {
     }
   }, [client])
 
-  const setupStreamForConversation = async (conversation: XMTPConversation) => {
-    const streamKey = conversation.topic // or another unique identifier
-    
-    // Clean up existing stream if it exists
-    if (streamsRef.current.has(streamKey)) {
-      streamsRef.current.get(streamKey)?.[Symbol.asyncIterator]().return?.()
-    }
-    
-    const stream = await conversation.streamMessages()
-    streamsRef.current.set(streamKey, stream)
-    
-    const handleNewMessages = async () => {
-      try {
-        for await (const msg of stream) {
-          handleNewStreamMessage(msg, conversation.peerAddress)
-        }
-      } catch (error) {
-        console.error('Error in message stream:', error)
-      }
-    }
+  const setupStreamForConversation = useCallback(async (conversation: XMTPConversation) => {
+    if (!client || streamsRef.current.has(conversation.topic)) return;
 
-    handleNewMessages()
-  }
+    try {
+      const stream = await conversation.streamMessages();
+      streamsRef.current.set(conversation.topic, stream);
+
+      const processStream = async () => {
+        for await (const msg of stream) {
+          const isGroup = conversation.context?.conversationId?.startsWith('group:')
+          const groupName = isGroup ? conversation.context?.metadata?.name : undefined;
+          
+          // Skip processing if conversation is deleted
+          if (isConversationDeleted(conversation.peerAddress, groupName)) {
+            continue;
+          }
+
+          // Add type annotation for msg
+          const newMessage: Message = {
+            content: msg.content as string,
+            senderAddress: msg.senderAddress,
+            sent: msg.sent
+          };
+
+          setConversations(prevConvs => {
+            return prevConvs.map(conv => {
+              if (conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase()) {
+                // Check if message already exists
+                const messageExists = conv.messages.some(m => 
+                  m.senderAddress === newMessage.senderAddress && 
+                  m.content === newMessage.content &&
+                  Math.abs(m.sent.getTime() - newMessage.sent.getTime()) < 1000
+                );
+                
+                if (messageExists) return conv;
+
+                // If conversation was deleted but new message arrived, remove from deleted list
+                if (isConversationDeleted(conv.peerAddress)) {
+                  removeFromDeletedChats(conv.peerAddress);
+                }
+
+                return {
+                  ...conv,
+                  messages: [...conv.messages, newMessage],
+                  preview: msg.content as string,
+                  lastMessage: msg.content as string,
+                  lastMessageTimestamp: Date.now(),
+                  unreadCount: conv.unreadCount + 1
+                };
+              }
+              return conv;
+            });
+          });
+        }
+      };
+
+      processStream().catch(console.error);
+    } catch (error) {
+      console.error('Error setting up message stream:', error);
+    }
+  }, [client]);
 
   const setupConversationStream = async (xmtp: Client) => {
     try {
-      if (conversationStreamRef.current) {
-        conversationStreamRef.current[Symbol.asyncIterator]().return?.()
-      }
+      conversationStreamRef.current = await xmtp.conversations.stream();
 
-      conversationStreamRef.current = await xmtp.conversations.stream()
-      
       const handleNewConversations = async () => {
         try {
           for await (const conversation of conversationStreamRef.current) {
-            const peerAddress = conversation.peerAddress.toLowerCase()
-            const isGroup = conversation.context?.conversationId?.startsWith('group:')
-            const conversationId = getConversationId(peerAddress, conversation.topic, isGroup)
-
-            // Check for duplicates
-            const existingConversation = conversations.find(conv => 
-              conv.peerAddress.toLowerCase() === peerAddress || 
-              conv.id === conversationId
-            )
-
-            if (existingConversation) {
-              await setupStreamForConversation(conversation)
-              continue
+            const peerAddress = conversation.peerAddress.toLowerCase();
+            
+            // Skip if conversation is deleted
+            if (isConversationDeleted(peerAddress)) {
+              continue;
             }
 
-            // For 1-on-1 chats
-            if (!isGroup) {
-              const userAddress = await xmtp.address
-              const userNFTs = await getCachedNFTs(userAddress)
-              const peerNFTs = await getCachedNFTs(peerAddress)
-              const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs)
+            const messages = await conversation.messages();
+            const userAddress = await client?.address;
+            
+            if (userAddress) {
+              const userNFTs = await getCachedNFTs(userAddress);
+              const peerNFTs = await getCachedNFTs(peerAddress);
+              const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs);
 
-              // Skip if no shared NFTs
-              if (sharedNFTs.length === 0) continue;
-
-              const messages = await conversation.messages()
-              const newConversation: ConversationData = {
-                id: conversationId,
+              const newConversation: Conversation = {
+                id: conversation.context?.conversationId || conversation.topic,
                 peerAddress,
                 messages: messages.map((msg: DecodedMessage) => ({
-                  senderAddress: msg.senderAddress,
                   content: msg.content as string,
+                  senderAddress: msg.senderAddress,
                   sent: msg.sent,
                 })),
                 preview: messages[messages.length - 1]?.content as string || '',
@@ -753,26 +791,29 @@ export function useXmtp() {
                 sharedNFTs,
                 unreadCount: 0,
                 lastMessageTimestamp: messages[messages.length - 1]?.sent.getTime() || Date.now(),
+              };
+
+              // Check again before adding to state
+              if (!isConversationDeleted(peerAddress)) {
+                setConversations(prev => {
+                  if (prev.some(conv => conv.peerAddress.toLowerCase() === peerAddress)) return prev;
+                  return [...prev, newConversation];
+                });
               }
 
-              setConversations(prev => {
-                if (prev.some(conv => conv.peerAddress.toLowerCase() === peerAddress)) return prev
-                return [...prev, newConversation]
-              })
-
-              await setupStreamForConversation(conversation)
+              await setupStreamForConversation(conversation);
             }
           }
         } catch (error) {
-          console.error('Error in conversation stream:', error)
+          console.error('Error in conversation stream:', error);
         }
-      }
+      };
 
-      handleNewConversations()
+      handleNewConversations();
     } catch (error) {
-      console.error('Error setting up conversation stream:', error)
+      console.error('Error setting up conversation stream:', error);
     }
-  }
+  };
 
   useEffect(() => {
     return () => {
@@ -873,6 +914,82 @@ export function useXmtp() {
     };
   }, [isConnected]);
 
+  const deleteConversation = useCallback((peerAddress: string, groupName?: string) => {
+    // Add to deleted chats
+    addDeletedChat(peerAddress, groupName);
+    
+    // Remove from current conversations
+    setConversations(prev => 
+      prev.filter(conv => 
+        !(conv.peerAddress.toLowerCase() === peerAddress.toLowerCase() && 
+          conv.groupMetadata?.name === groupName)
+      )
+    );
+
+    // Clear current conversation if it was the deleted one
+    if (currentConversation?.peerAddress.toLowerCase() === peerAddress.toLowerCase()) {
+      setCurrentConversation(null);
+    }
+
+    // Clean up the message stream for this conversation
+    const streamKey = `${peerAddress}${groupName || ''}`;
+    if (streamsRef.current.has(streamKey)) {
+      streamsRef.current.get(streamKey)?.[Symbol.asyncIterator]().return?.();
+      streamsRef.current.delete(streamKey);
+    }
+  }, []);
+
+  const handleNewConversations = useCallback(async () => {
+    if (!client) return;
+    
+    try {
+      setIsLoadingConversations(true);
+      const convos = await client.conversations.list();
+      const processedConvos: Conversation[] = [];
+
+      for (const conversation of convos) {
+        const peerAddress = conversation.peerAddress.toLowerCase();
+        
+        // Skip if conversation is deleted
+        if (isConversationDeleted(peerAddress)) {
+          continue;
+        }
+
+        const messages = await conversation.messages();
+        const userAddress = await client.address;
+        const userNFTs = await getCachedNFTs(userAddress);
+        const peerNFTs = await getCachedNFTs(peerAddress);
+        const sharedNFTs = getSharedNFTs(userNFTs, peerNFTs);
+
+        const processedMessages = messages.map(msg => ({
+          content: msg.content,
+          senderAddress: msg.senderAddress,
+          sent: msg.sent
+        }));
+
+        // Double-check deletion status before adding
+        if (!isConversationDeleted(peerAddress)) {
+          processedConvos.push({
+            id: conversation.context?.conversationId || conversation.topic,
+            peerAddress,
+            messages: processedMessages,
+            preview: processedMessages[processedMessages.length - 1]?.content || '',
+            lastMessage: processedMessages[processedMessages.length - 1]?.content || '',
+            lastMessageTimestamp: processedMessages[processedMessages.length - 1]?.sent.getTime() || Date.now(),
+            unreadCount: 0,
+            sharedNFTs
+          });
+        }
+      }
+
+      setConversations(processedConvos);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  }, [client, getCachedNFTs]);
+
   return {
     connect,
     disconnect,
@@ -893,5 +1010,6 @@ export function useXmtp() {
     markConversationAsRead,
     selectConversation,
     isLoadingConversations,
+    deleteConversation,
   } as const
 } 

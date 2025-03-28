@@ -1,4 +1,4 @@
-const DELETED_CHATS_KEY = 'deletedChats';
+const DELETED_CHATS_KEY = 'deleted_chats';
 
 interface DeletedChat {
   peerAddress: string;
@@ -7,32 +7,59 @@ interface DeletedChat {
 }
 
 export const getDeletedChats = (): DeletedChat[] => {
-  if (typeof window === 'undefined') return [];
-  const deleted = localStorage.getItem(DELETED_CHATS_KEY);
-  return deleted ? JSON.parse(deleted) : [];
+  try {
+    const chats = localStorage.getItem(DELETED_CHATS_KEY);
+    return chats ? JSON.parse(chats) : [];
+  } catch (error) {
+    console.error('Error reading deleted chats:', error);
+    return [];
+  }
 };
 
 export const addDeletedChat = (peerAddress: string, groupName?: string) => {
   const deletedChats = getDeletedChats();
-  deletedChats.push({
-    peerAddress,
+  const normalizedPeerAddress = peerAddress.toLowerCase();
+  
+  // Remove any existing entry for this peer
+  const filteredChats = deletedChats.filter(chat => 
+    chat.peerAddress.toLowerCase() !== normalizedPeerAddress
+  );
+  
+  // Add new entry
+  filteredChats.push({
+    peerAddress: normalizedPeerAddress,
     groupName,
     deletedAt: Date.now()
   });
-  localStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(deletedChats));
+  
+  localStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(filteredChats));
 };
 
 export const isConversationDeleted = (peerAddress: string, groupName?: string): boolean => {
   const deletedChats = getDeletedChats();
-  return deletedChats.some(chat => 
-    chat.peerAddress === peerAddress && chat.groupName === groupName
-  );
+  const normalizedPeerAddress = peerAddress.toLowerCase();
+  
+  return deletedChats.some(chat => {
+    const addressMatch = chat.peerAddress.toLowerCase() === normalizedPeerAddress;
+    
+    // For direct messages (no groupName)
+    if (!groupName && !chat.groupName) {
+      return addressMatch;
+    }
+    
+    // For group chats
+    return addressMatch && chat.groupName === groupName;
+  });
 };
 
 export const removeFromDeletedChats = (peerAddress: string, groupName?: string) => {
   const deletedChats = getDeletedChats();
-  const filtered = deletedChats.filter(chat => 
-    !(chat.peerAddress === peerAddress && chat.groupName === groupName)
+  const normalizedPeerAddress = peerAddress.toLowerCase();
+  
+  const filteredChats = deletedChats.filter(chat => 
+    chat.peerAddress.toLowerCase() !== normalizedPeerAddress ||
+    chat.groupName !== groupName
   );
-  localStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(filtered));
+  
+  localStorage.setItem(DELETED_CHATS_KEY, JSON.stringify(filteredChats));
 }; 
