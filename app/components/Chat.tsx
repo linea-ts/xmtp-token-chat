@@ -279,12 +279,7 @@ function ChatContent() {
                     />
                     <button
                       onClick={handleStartChat}
-                      disabled={!isValidEthAddress(recipientAddress)}
-                      className={`mt-2 w-full btn-primary ${
-                        !isValidEthAddress(recipientAddress) 
-                          ? 'opacity-50 cursor-not-allowed' 
-                          : ''
-                      }`}
+                      className="mt-2 w-full btn-primary"
                     >
                       Start Chat
                     </button>
