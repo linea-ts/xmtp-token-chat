@@ -108,6 +108,8 @@ function ChatContent() {
   const handleStartChat = async () => {
     if (!isValidEthAddress(recipientAddress)) {
       setStartChatError('Please enter a valid wallet address');
+      setRecipientAddress('');
+      setDisplayAddress('');
       
       // Clear error after 3 seconds
       if (startChatTimeoutRef.current) {
@@ -126,12 +128,11 @@ function ChatContent() {
       setRecipientAddress('');
       setDisplayAddress('');
     } catch (error: any) {
-      // Check for the specific error message
-      if (error.message === "Cannot start conversation with yourself") {
-        setStartChatError('You cannot send messages to yourself.');
-      } else {
-        setStartChatError('Unable to start chat. Please try again.');
-      }
+      // Preserve the specific error messages from useXmtp.ts
+      setStartChatError(error.message || 'Unable to start chat. Please try again.');
+      // Clear the input form on error
+      setRecipientAddress('');
+      setDisplayAddress('');
       
       if (startChatTimeoutRef.current) {
         clearTimeout(startChatTimeoutRef.current);
@@ -207,6 +208,15 @@ function ChatContent() {
 
       <Header />
 
+      {/* Add error toast outside of the main content area */}
+      {startChatError && (
+        <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 min-w-[300px] m-4">
+          <div className="p-4 bg-red-100 font-semibold text-red-700 text-sm rounded-md shadow-lg border border-red-200 animate-fade-in">
+            {startChatError}
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 container mx-auto px-4 pb-2 pt-2 min-h-0">
         <div className="grid grid-cols-3 gap-4 h-full">
           <div className="col-span-1 border rounded p-3 flex flex-col overflow-hidden">
@@ -278,11 +288,6 @@ function ChatContent() {
                     >
                       Start Chat
                     </button>
-                    {startChatError && (
-                      <div className="absolute left-0 right-0 mt-2 p-2 bg-red-100 text-red-700 text-sm rounded-md shadow-md animate-fade-in">
-                        {startChatError}
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex-1 overflow-hidden flex flex-col min-h-0">
@@ -381,7 +386,14 @@ function ChatContent() {
           </div>
 
           <div className="col-span-2 border rounded p-3 flex flex-col min-h-0 bg-gray-100">
-            {error && <div className="text-red-500 mb-4">{error}</div>}
+            {/* Move the error message to be fixed positioned */}
+            {error && (
+              <div className="fixed top-24 left-1/2 transform -translate-x-1/2 z-50 min-w-[300px] m-4">
+                <div className="p-4 bg-red-100 font-semibold text-red-700 text-sm rounded-md shadow-lg border border-red-200 animate-fade-in">
+                  {error}
+                </div>
+              </div>
+            )}
             
             <MessageList 
               messages={currentMessages}

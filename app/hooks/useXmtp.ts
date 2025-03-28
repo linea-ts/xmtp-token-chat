@@ -315,7 +315,7 @@ export function useXmtp() {
       const userAddress = await client.address
       
       if (peerAddress === userAddress.toLowerCase()) {
-        throw new Error("Cannot start conversation with yourself")
+        throw new Error("You cannot send messages to yourself")
       }
 
       // Enhanced NFT validation with more specific errors
@@ -517,6 +517,16 @@ export function useXmtp() {
       const userAddress = await xmtp.address
       const userNFTs = await getCachedNFTs(userAddress)
       
+      // Set up streams first, before processing conversations
+      await Promise.all(allConversations.map(async (conversation) => {
+        try {
+          await setupStreamForConversation(conversation)
+        } catch (error) {
+          console.error('Error setting up stream for conversation:', error)
+        }
+      }))
+
+      // Process conversations for UI
       const validConversations: ConversationData[] = []
       const BATCH_SIZE = 5;
 
@@ -528,7 +538,6 @@ export function useXmtp() {
             const peerAddress = conversation.peerAddress.toLowerCase()
             const groupName = isGroup ? conversation.context?.metadata?.name : undefined
             
-            // Skip if conversation is deleted
             if (isConversationDeleted(peerAddress, groupName)) {
               return null;
             }
@@ -560,7 +569,6 @@ export function useXmtp() {
               }
             }
 
-            // Keep existing group chat logic unchanged
             if (isGroup) {
               const groupId = conversation.context?.conversationId
               const isTokenGroup = availableGroupChats.some(g => 
@@ -569,6 +577,7 @@ export function useXmtp() {
               if (!isTokenGroup) return null;
 
               const messages = await conversation.messages()
+              
               return {
                 id: groupId || `group:${conversation.context?.metadata?.name}`,
                 peerAddress: conversation.peerAddress,
@@ -613,10 +622,6 @@ export function useXmtp() {
       
       setConversations(sortedConversations)
 
-      // Set up streams for each conversation
-      for (const conversation of allConversations) {
-        await setupStreamForConversation(conversation)
-      }
     } catch (error) {
       console.error('Error loading conversations:', error)
       setError('Failed to load conversations')
@@ -708,23 +713,29 @@ export function useXmtp() {
   }, [client])
 
   const setupStreamForConversation = useCallback(async (conversation: XMTPConversation) => {
-    if (!client || streamsRef.current.has(conversation.topic)) return;
+    // Use a consistent key format
+    const streamKey = conversation.topic;
+    
+    // Don't return early if stream exists - we want to ensure it's working
+    if (streamsRef.current.has(streamKey)) {
+      // Clean up existing stream before creating a new one
+      streamsRef.current.get(streamKey)?.[Symbol.asyncIterator]().return?.();
+      streamsRef.current.delete(streamKey);
+    }
 
     try {
       const stream = await conversation.streamMessages();
-      streamsRef.current.set(conversation.topic, stream);
+      streamsRef.current.set(streamKey, stream);
 
       const processStream = async () => {
         for await (const msg of stream) {
-          const isGroup = conversation.context?.conversationId?.startsWith('group:')
+          const isGroup = conversation.context?.conversationId?.startsWith('group:');
           const groupName = isGroup ? conversation.context?.metadata?.name : undefined;
           
-          // Skip processing if conversation is deleted
           if (isConversationDeleted(conversation.peerAddress, groupName)) {
             continue;
           }
 
-          // Add type annotation for msg
           const newMessage: Message = {
             content: msg.content as string,
             senderAddress: msg.senderAddress,
@@ -734,7 +745,6 @@ export function useXmtp() {
           setConversations(prevConvs => {
             return prevConvs.map(conv => {
               if (conv.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase()) {
-                // Check if message already exists
                 const messageExists = conv.messages.some(m => 
                   m.senderAddress === newMessage.senderAddress && 
                   m.content === newMessage.content &&
@@ -743,15 +753,13 @@ export function useXmtp() {
                 
                 if (messageExists) return conv;
 
-                // If conversation was deleted but new message arrived, remove from deleted list
                 if (isConversationDeleted(conv.peerAddress)) {
                   removeFromDeletedChats(conv.peerAddress);
                 }
 
-                // Only increment unread count if message is from someone else
-                const isFromMe = msg.senderAddress.toLowerCase() === client.address?.toLowerCase();
-                const shouldIncrementUnread = !isFromMe && 
-                  currentConversation?.peerAddress.toLowerCase() !== conversation.peerAddress.toLowerCase();
+                const isFromMe = msg.senderAddress.toLowerCase() === client?.address?.toLowerCase();
+                const isActiveConversation = currentConversation?.peerAddress.toLowerCase() === conversation.peerAddress.toLowerCase();
+                const shouldIncrementUnread = !isFromMe && !isActiveConversation;
 
                 return {
                   ...conv,
@@ -768,11 +776,17 @@ export function useXmtp() {
         }
       };
 
-      processStream().catch(console.error);
+      // Start processing the stream immediately
+      processStream().catch(error => {
+        console.error('Error processing message stream:', error);
+        // If stream fails, remove it so we can try again
+        streamsRef.current.delete(streamKey);
+      });
     } catch (error) {
       console.error('Error setting up message stream:', error);
+      streamsRef.current.delete(streamKey);
     }
-  }, [client, currentConversation]);
+  }, [client?.address]); // Remove currentConversation dependency
 
   const setupConversationStream = async (xmtp: Client) => {
     try {
@@ -906,8 +920,6 @@ export function useXmtp() {
         conversation.peerAddress
       )
       setCurrentConversation(xmtpConversation)
-      
-      await setupStreamForConversation(xmtpConversation)
       
       return conversation
     } catch (error) {
